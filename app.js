@@ -299,7 +299,8 @@ function cardNode(c, board, colIdx){
     <div class="card-foot"><button class="mini" data-a="edit">Edit</button><button class="mini" data-a="left" title="Move card left">←</button><button class="mini" data-a="right" title="Move card right">→</button><button class="mini${isDone?' done-on':''}" data-a="done" title="${isDone?'Done ✓':'Send card to Done'}">✓</button><button class="mini del" data-a="delcard" title="Delete this card">🗑️</button></div>`;
   if(inAll) d.querySelector('.board-chip').textContent='📋 '+board.name;
   d.querySelectorAll('.tag-chip').forEach(el=>{
-    el.onclick=(e)=>{ e.stopPropagation(); $('filterTag').value=el.dataset.tag; renderBoard(); };
+    if($('filterTag').value===el.dataset.tag) el.classList.add('on');
+    el.onclick=(e)=>{ e.stopPropagation(); const ft=$('filterTag'); ft.value=(ft.value===el.dataset.tag)?'':el.dataset.tag; renderBoard(); };
   });
   d.querySelector('.card-title').textContent=c.title;
   if(c.details) d.querySelector('.card-details').textContent=c.details;
@@ -388,6 +389,16 @@ function askDanger(o){
 $('dangerInput').addEventListener('input',(e)=>{ $('dangerGo').disabled = e.target.value.trim().toUpperCase()!==$('dangerWord').textContent; });
 $('dangerCancel').onclick=()=>$('dangerModal').classList.add('hidden');
 $('dangerGo').onclick=()=>{ $('dangerModal').classList.add('hidden'); if(dangerAction){ const a=dangerAction; dangerAction=null; a(); } };
+/* ——— United ribbon collapse (crest-only until tapped) ——— */
+function toggleUtd(force){
+  const bar=$('unitedBar'); if(!bar) return;
+  const open = force!==undefined?force:bar.classList.contains('collapsed');
+  bar.classList.toggle('collapsed', !open);
+  try{ localStorage.setItem('qb.united.open', open?'1':'0'); }catch{}
+}
+(function initUtdCollapsed(){
+  try{ if(localStorage.getItem('qb.united.open')!=='1'){ const b=$('unitedBar'); if(b) b.classList.add('collapsed'); } }catch{}
+})();
 const qaSugEl=document.createElement('div'); qaSugEl.id='qaSuggest'; qaSugEl.className='qa-suggest hidden';
 document.querySelector('.quickadd').appendChild(qaSugEl);
 let qaSugIdx=0, qaSugList=[];
@@ -452,6 +463,18 @@ function refreshQaMeta(){
     st.appendChild(el);
   });
   if(s&&s.priority) $('quickPriority').value=s.priority;
+  const qt=$('quickTag');
+  if(qt){
+    const cur=qt.value;
+    const all=[...new Set(state.cards.flatMap(c=>c.tags||[]))].sort();
+    qt.innerHTML='<option value="">#tag</option>'+all.map(t=>`<option value="${t}">#${t}</option>`).join('');
+    qt.value=[...qt.options].some(o=>o.value===cur)?cur:'';
+    qt.onchange=()=>{
+      if(!qt.value) return;
+      const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+'#'+qt.value+' ';
+      qt.value=''; expandQa(); inp.focus();
+    };
+  }
 }
 const QA_TPLS=['#errand !high','due:today !high','due:tomorrow','#idea','@Quick Notes #note','#home due:tomorrow'];
 (function renderQaTpls(){
@@ -644,7 +667,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v30';
+const APP_VER = 'v31';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -795,7 +818,7 @@ async function loadUnited(){
     listEl.innerHTML+=`<span class="u-upd" id="uUpd" title="Tap badge or here to refresh fixtures">upd ${upd} ↻</span>`;
     const uu=$('uUpd'); if(uu) uu.onclick=()=>forceUtdRefresh();
   };
-  const badge=document.querySelector('.united-badge'); if(badge) badge.onclick=()=>forceUtdRefresh();
+  const badge=document.querySelector('.united-badge'); if(badge) badge.onclick=()=>toggleUtd();
   function forceUtdRefresh(){ try{localStorage.removeItem(UTD_CACHE_KEY);}catch{} gamesTs=0; loadUnited(); }
   if(games) renderUtd(games);
   else renderUtd(UTD_FALLBACK.map(x=>({d:x.d,h:x.h,a:x.a,s:x.s,fin:false})));
