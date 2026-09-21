@@ -559,7 +559,11 @@ function doQuickAdd(){
   save(); render(); inp.focus();
 }
 $('quickAddBtn').onclick=doQuickAdd;
-$('quickInput').addEventListener('keydown',(e)=>{if(e.key==='Enter')doQuickAdd();});
+$('quickInput').addEventListener('keydown',(e)=>{
+  if(e.key!=='Enter') return;
+  if(listening){ e.preventDefault(); finishVoice(false); return; } // Enter ends recording into the text box
+  doQuickAdd();
+});
 document.addEventListener('keydown',(e)=>{
   if(e.key==='n'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();$('quickInput').focus();}
   if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();$('searchInput').focus();}
@@ -705,7 +709,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v34';
+const APP_VER = 'v35';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
