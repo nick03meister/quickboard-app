@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>QuickBoard — Daily Capture Kanban</title>
+<meta name="description" content="Trello-style quick-capture Kanban: tasks, notes, onboarding, credentials. Works on Mac Chrome + Samsung." />
+<meta name="theme-color" content="#7a0f0f" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="icon" href="./icon-192.png" />
+<link rel="apple-touch-icon" href="./icon-180.png" />
+<link rel="stylesheet" href="./styles.css?v=27" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo"><img src="./manutd-crest.webp?v=27" alt="Manchester United" /></div>
+    <div>
+      <div class="brand-title">QuickBoard</div>
+      <div class="brand-sub">daily capture • kanban</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <input id="searchInput" class="search" type="search" placeholder="Search cards…  ( / )" autocomplete="off" />
+    <select id="filterTag" title="Filter by tag"><option value="">All tags</option></select>
+    <select id="filterPriority" title="Filter by priority">
+      <option value="">All priorities</option>
+      <option value="high">High</option>
+      <option value="med">Medium</option>
+      <option value="low">Low</option>
+    </select>
+    <select id="filterDue" title="Filter by due">
+      <option value="">Any due</option>
+      <option value="overdue">Overdue</option>
+      <option value="today">Due today</option>
+      <option value="week">Next 7 days</option>
+      <option value="nodate">No date</option>
+    </select>
+    <button id="syncNowBtn" class="btn ghost" title="Pull latest from cloud now">⟳</button>
+    <button id="importBtn" class="btn ghost" title="Import from Apple Notes / text / JSON">Import</button>
+    <button id="exportBtn" class="btn ghost" title="Export / backup">Export</button>
+    <button id="settingsBtn" class="btn ghost" title="Sync + settings">Sync</button>
+  </div>
+</header>
+
+<div id="credsBanner" class="creds-banner hidden">
+  ⚠️ You are on the <b>Credentials</b> board. This is plain-text quick notes (your choice). Don't store bank / production secrets here long-term — use Apple Keychain / 1Password for real secrets.
+  <button id="credsDismiss" class="link-btn">dismiss</button>
+</div>
+
+<nav class="boardbar">
+  <div id="boardTabs" class="board-tabs"></div>
+  <button id="addBoardBtn" class="btn small">+ Board</button>
+</nav>
+
+<section class="quickadd">
+  <div class="qa-row">
+    <input id="quickInput" type="text" placeholder="Quick add → e.g. Call bank @Daily Tasks #errand due:tomorrow !high" autocomplete="off" />
+    <input id="quickDue" type="date" title="Due date" />
+    <select id="quickPriority" title="Priority">
+      <option value="">No priority</option>
+      <option value="low">Low</option>
+      <option value="med" selected>Med</option>
+      <option value="high">High</option>
+    </select>
+    <button id="quickAddBtn" class="btn primary">Add</button>
+  </div>
+  <div class="qa-hint"><span class="qa-lead">💡 Tip:</span><span class="qa-ex">use <code>#tag</code> for tags,</span><span class="qa-ex"><code>!high / !med / !low</code> for priority,</span><span class="qa-ex"><code>@board</code> to route <code>@Quick Notes</code>,</span><span class="qa-ex"><code>due:today / tomorrow / 25-09-2026</code> for dates.</span><span class="qa-ex"><span class="kbd">N</span> jumps to quick-add, <span class="kbd">Enter</span> adds to Inbox.</span></div>
+</section>
+
+<section id="unitedBar" class="united-bar">
+  <div class="united-badge"><img src="./manutd-crest.webp?v=27" alt="MUFC" /></div>
+  <div class="united-next" id="unitedNext">Loading United fixtures…</div>
+  <div class="united-count" id="unitedCount"></div>
+  <div class="united-list" id="unitedList"></div>
+  <a class="united-link" href="https://www.manutd.com/en" target="_blank" rel="noopener">manutd.com ↗</a>
+</section>
+
+<main id="board" class="board"></main>
+
+<footer class="footer">
+  <span id="statsLine">—</span>
+  <span class="dot">•</span>
+  <span id="verLine">v27 • checking sync…</span>
+  <span class="dot">•</span>
+  <span>Add to Home Screen on Samsung for app mode</span>
+</footer>
+
+<!-- Card modal -->
+<div id="cardModal" class="modal hidden">
+  <div class="modal-card">
+    <h3 id="modalTitle">Edit card</h3>
+    <label>Title<input id="mTitle" type="text" /></label>
+    <label>Details<textarea id="mDetails" rows="5" placeholder="quick notes, onboarding steps, credential hints…"></textarea></label>
+    <div class="grid2">
+      <label>Tags (comma)<input id="mTags" type="text" placeholder="work, urgent" /></label>
+      <label>Due<input id="mDue" type="date" /></label>
+    </div>
+    <div class="grid2">
+      <label>Priority<select id="mPriority"><option value="">None</option><option value="low">Low</option><option value="med">Med</option><option value="high">High</option></select></label>
+      <label>Column<select id="mColumn"></select></label>
+    </div>
+    <div class="modal-actions">
+      <button id="mDelete" class="btn danger">Delete</button>
+      <div class="spacer"></div>
+      <button id="mCancel" class="btn ghost">Cancel</button>
+      <button id="mSave" class="btn primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import modal -->
+<div id="importModal" class="modal hidden">
+  <div class="modal-card wide">
+    <h3>Import — Apple Notes / text / JSON</h3>
+    <p class="muted">Paste from Apple Notes — each non-empty line becomes a card in the current board's Inbox. Supports <code>#tag</code>, <code>!high</code>, <code>due:25-09-2026</code> in each line.</p>
+    <textarea id="importText" rows="10" placeholder="Paste here…&#10;Call plumber #home due:tomorrow&#10;Onboarding: get VPN access #onboarding !high&#10;WiFi password hint - router in hall"></textarea>
+    <div class="grid2">
+      <label>Target board<select id="importBoard"></select></label>
+      <label>Or import JSON backup<input id="importFile" type="file" accept=".json,.txt" /></label>
+    </div>
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button id="importCancel" class="btn ghost">Cancel</button>
+      <button id="importGo" class="btn primary">Import lines</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings / Sync modal -->
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-card wide">
+    <h3>Sync — Mac Chrome ↔ Samsung S21</h3>
+    <div class="sync-grid">
+      <div class="sync-box">
+        <h4>Option A — Same WiFi / quick (no setup)</h4>
+        <ol>
+          <li>On Mac: run <code>python3 -m http.server 8000</code> in this folder, open <code>http://localhost:8000</code></li>
+          <li>On Samsung (same WiFi): open <code>http://YOUR-MAC-IP:8000</code></li>
+          <li>Use Export → Import JSON to move data for now</li>
+        </ol>
+      </div>
+      <div class="sync-box">
+        <h4>Option B — Real auto-sync (recommended)</h4>
+        <ol>
+          <li>Host this folder free on Netlify / Vercel / GitHub Pages (1 min drag-drop)</li>
+          <li>Paste Firebase config below → auto-sync across devices</li>
+          <li>On Samsung Chrome → ⋮ → Add to Home screen</li>
+        </ol>
+        <label>Firebase config JSON (optional)<textarea id="firebaseConfig" rows="4" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…"}'></textarea></label>
+        <div class="row">
+          <button id="saveFirebase" class="btn small primary">Enable sync</button>
+          <button id="disableFirebase" class="btn small ghost">Use local-only</button>
+          <span id="syncStatus" class="muted"></span>
+        </div>
+      </div>
+    </div>
+    <h4>Danger zone</h4>
+    <div class="row">
+      <button id="forcePullBtn" class="btn small primary">Force reload from cloud</button>
+      <button id="wipeBtn" class="btn small danger">Reset all data</button>
+      <button id="seedBtn" class="btn small ghost">Restore demo boards</button>
+    </div>
+    <h4>Auto-backups (this device, last 5)</h4>
+    <p class="muted" style="margin:4px 0">Saved automatically every day + before any reset/restore.</p>
+    <div id="backupList" class="backup-list"></div>
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button id="settingsClose" class="btn primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Prominent danger confirm -->
+<div id="dangerModal" class="modal hidden" style="z-index:60">
+  <div class="modal-card danger-card">
+    <h3 id="dangerTitle">⚠️ Are you sure?</h3>
+    <p id="dangerDesc" class="muted"></p>
+    <label>Type <b id="dangerWord">RESET</b> to confirm<input id="dangerInput" type="text" placeholder="type the word above" autocomplete="off" /></label>
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button id="dangerCancel" class="btn ghost">Cancel (safe)</button>
+      <button id="dangerGo" class="btn danger" disabled>Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="./firebase-config.js?v=27"></script>
+<script src="./app.js?v=27"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
