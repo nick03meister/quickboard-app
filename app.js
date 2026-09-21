@@ -505,10 +505,12 @@ $('voiceCancel').onclick=()=>finishVoice(true);
 function startVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ alert('Voice input not supported in this browser — try Chrome.'); return; }
-  userStopped=false; voiceFinal=''; voiceRestarts=0;
+  userStopped=false; voiceFinal=''; voiceInterim=''; voiceRestarts=0; listening=true;
+  // optimistic UI: bar + timer show instantly on tap, before the engine confirms
+  voiceStart=Date.now(); voiceUI(true); clearInterval(voiceTickInt); voiceTickInt=setInterval(voiceTick,500);
   recog=new SR(); recog.lang=navigator.language||'en-US';
-  recog.continuous=true; recog.interimResults=true; // keep going through pauses; stop ONLY on mic tap
-  recog.onstart=()=>{ listening=true; voiceStart=Date.now(); voiceUI(true); clearInterval(voiceTickInt); voiceTickInt=setInterval(voiceTick,500); };
+  recog.continuous=true; recog.interimResults=true; // stream partials live; stop ONLY on mic tap
+  recog.onstart=()=>{ listening=true; voiceStart=Date.now(); };
   recog.onresult=(e)=>{
     let interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
@@ -521,7 +523,7 @@ function startVoice(){
   };
   recog.onerror=(e)=>{
     if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-      userStopped=true;
+      userStopped=true; listening=false; clearInterval(voiceTickInt); voiceUI(false);
       alert('Mic blocked — allow microphone access, then try again.');
     }
     // other errors (no-speech, network blips): onend auto-restarts below
@@ -532,7 +534,7 @@ function startVoice(){
     if(voiceRestarts<25){ try{recog.start();}catch{} } // resume automatically
     else finishVoice(false);
   };
-  try{ recog.start(); }catch{ alert('Could not start voice input.'); }
+  try{ recog.start(); }catch{ listening=false; clearInterval(voiceTickInt); voiceUI(false); alert('Could not start voice input.'); }
 }
 function commitVoice(cancelled){
   let txt=voiceFinal.trim()||voiceInterim.trim();
@@ -567,7 +569,7 @@ function doQuickAdd(){
 $('quickAddBtn').onclick=doQuickAdd;
 $('quickInput').addEventListener('keydown',(e)=>{
   if(e.key!=='Enter') return;
-  if(listening){ e.preventDefault(); finishVoice(false); return; } // Enter ends recording into the text box
+  if(listening){ e.preventDefault(); return; } // mic-tap only stops recording; Enter never interrupts speech
   if(voiceCommitT){ clearTimeout(voiceCommitT); voiceCommitT=null; commitVoice(false); } // flush pending dictation first
   doQuickAdd();
 });
@@ -716,7 +718,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v36';
+const APP_VER = 'v37';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
