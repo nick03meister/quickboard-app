@@ -516,6 +516,7 @@ function startVoice(){
       if(e.results[i].isFinal) voiceFinal+=t+' '; else interim+=t;
     }
     $('voiceLive').textContent=(voiceFinal+interim).trim()||'Listening…';
+    const vl=$('voiceLive'); vl.scrollLeft=vl.scrollWidth; // track latest words, not the first line
   };
   recog.onerror=(e)=>{
     if(e.error==='not-allowed'||e.error==='service-not-allowed'){
@@ -704,7 +705,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v33';
+const APP_VER = 'v34';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

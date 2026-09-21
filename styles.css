@@ -60,7 +60,8 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .eq i:nth-child(2){animation-delay:.15s}.eq i:nth-child(3){animation-delay:.3s}.eq i:nth-child(4){animation-delay:.45s}
 @keyframes eqb{0%,100%{height:4px;opacity:.6}50%{height:14px;opacity:1}}
 #voiceTimer{font-variant-numeric:tabular-nums;font-weight:800;flex:0 0 auto}
-#voiceLive{opacity:.85;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:44vw}
+#voiceLive{opacity:.9;font-size:13px;overflow-x:auto;white-space:nowrap;max-width:44vw;scrollbar-width:none}
+#voiceLive::-webkit-scrollbar{display:none}
 #voiceBar .mini{flex:0 0 auto}
 .qa-row.details{display:none;margin-top:8px;align-items:center;flex-wrap:wrap}
 .quickadd.expanded .qa-row.details{display:flex}
