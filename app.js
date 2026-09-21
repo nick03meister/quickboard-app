@@ -136,7 +136,7 @@ const $ = (id)=>document.getElementById(id);
 const boardEl = $('board'), tabsEl = $('boardTabs');
 
 function render(){
-  renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats();
+  renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats(); refreshQaMeta();
 }
 function boardProgress(b){
   const all=boardCards(b.id); if(!all.length) return 0;
@@ -428,6 +428,61 @@ $('quickInput').addEventListener('keydown',(e)=>{
   else if(e.key==='Tab'){e.preventDefault();acceptQaSug(qaSugIdx);}
   else if(e.key==='Escape'){qaSugEl.classList.add('hidden');}
 });
+/* ——— quick-add upgrades: expand, target label, smart defaults, templates, voice ——— */
+const SMART_KEY='quickboard.smart.v1';
+function getSmart(){ try{ return JSON.parse(localStorage.getItem(SMART_KEY)||'{}'); }catch{ return {}; } }
+function rememberSmart(boardId, tags, priority){
+  try{
+    const s=getSmart(); const prev=s[boardId]||{tags:[],priority:''};
+    const tags3=[...tags.slice(0,3), ...prev.tags].filter((t,i,a)=>t&&a.indexOf(t)===i).slice(0,3);
+    s[boardId]={tags:tags3, priority:priority||prev.priority||''};
+    localStorage.setItem(SMART_KEY, JSON.stringify(s));
+  }catch{}
+}
+function refreshQaMeta(){
+  const b=activeBoard();
+  const t=$('qaTarget');
+  if(t) t.textContent = b?`→ ${b.name} → ${b.columns[0]?.name||''}` : '';
+  const st=$('smartTags'); if(!st) return;
+  const s=getSmart()[state.activeBoardId];
+  st.innerHTML='';
+  (s&&s.tags||[]).forEach(tag=>{
+    const el=document.createElement('span'); el.className='smart-tag'; el.textContent='#'+tag; el.title='Tap to add this tag';
+    el.onclick=()=>{ const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+'#'+tag+' '; inp.focus(); };
+    st.appendChild(el);
+  });
+  if(s&&s.priority) $('quickPriority').value=s.priority;
+}
+const QA_TPLS=['#errand !high','due:today !high','due:tomorrow','#idea','@Quick Notes #note','#home due:tomorrow'];
+(function renderQaTpls(){
+  const w=$('qaTemplates'); if(!w) return;
+  QA_TPLS.forEach(t=>{
+    const el=document.createElement('button'); el.className='qa-tpl'; el.textContent=t;
+    el.onclick=()=>{ const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+t+' '; expandQa(); inp.focus(); };
+    w.appendChild(el);
+  });
+})();
+function expandQa(){ $('quickadd').classList.add('expanded'); }
+function maybeCollapseQa(){ if(!$('quickInput').value) $('quickadd').classList.remove('expanded'); }
+$('quickInput').addEventListener('focus',()=>{ expandQa(); refreshQaMeta(); });
+$('quickInput').addEventListener('blur',()=>{ setTimeout(maybeCollapseQa,150); });
+/* voice capture */
+let recog=null, listening=false;
+$('voiceBtn').onclick=()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alert('Voice input not supported in this browser — try Chrome.'); return; }
+  if(listening){ try{recog.stop();}catch{} return; }
+  recog=new SR(); recog.lang=navigator.language||'en-US'; recog.interimResults=false;
+  recog.onstart=()=>{ listening=true; $('voiceBtn').classList.add('listening'); };
+  recog.onend=()=>{ listening=false; $('voiceBtn').classList.remove('listening'); };
+  recog.onerror=()=>{ listening=false; $('voiceBtn').classList.remove('listening'); };
+  recog.onresult=(e)=>{
+    const txt=e.results[0][0].transcript;
+    const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+txt+' ';
+    expandQa(); inp.focus();
+  };
+  try{ recog.start(); }catch{ alert('Could not start voice input.'); }
+};
 function doQuickAdd(){
   const inp=$('quickInput'); const v=inp.value.trim(); if(!v)return;
   const p=parseQuick(v);
@@ -436,6 +491,8 @@ function doQuickAdd(){
   const firstCol=b.columns[0].id;
   state.cards.unshift({id:uid(),boardId:b.id,colId:firstCol,title:p.title,details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
   inp.value=''; $('quickDue').value='';
+  rememberSmart(b.id, p.tags, p.priority);
+  refreshQaMeta();
   qaSugEl.classList.add('hidden');
   state.activeBoardId=b.id; // jump to the targeted board so you see the card
   save(); render(); inp.focus();
@@ -587,7 +644,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v29';
+const APP_VER = 'v30';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
