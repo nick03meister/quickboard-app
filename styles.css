@@ -49,6 +49,9 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .qa-row.main input[type="text"]:focus{border-color:var(--united);outline:none;box-shadow:0 0 0 3px rgba(218,41,28,.12)}
 .btn.voice{border-radius:12px;background:#fff}
 .btn.voice{position:relative;overflow:visible}
+.seg{display:flex;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px}
+.seg button{border:none;background:transparent;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;color:#78716c}
+.seg button.on{background:#fff;color:#b81d12;box-shadow:0 1px 3px rgba(28,10,10,.15)}
 .btn.voice.listening{background:#b81d12;border-color:#8f1008;color:#fff}
 .btn.voice.listening::after{content:'';position:absolute;inset:-2px;border-radius:14px;border:2px solid rgba(218,41,28,.7);animation:sonar 1.8s ease-out infinite;pointer-events:none}
 @keyframes sonar{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.22);opacity:0}}

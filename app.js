@@ -500,6 +500,17 @@ function voiceTick(){
   const s=Math.floor((Date.now()-voiceStart)/1000);
   $('voiceTimer').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 }
+/* voice language: EN / Hindi (persisted) */
+const VOICE_LANG_KEY='quickboard.voice.lang';
+function voiceLang(){ try{ return localStorage.getItem(VOICE_LANG_KEY)||'en-US'; }catch{ return 'en-US'; } }
+(function initVoiceLang(){
+  const w=$('voiceLang'); if(!w) return;
+  const cur=voiceLang();
+  w.querySelectorAll('button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.l===cur);
+    b.onclick=()=>{ try{localStorage.setItem(VOICE_LANG_KEY,b.dataset.l);}catch{} w.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); };
+  });
+})();
 $('voiceBtn').onclick=()=>{ listening?finishVoice(false):startVoice(); };
 $('voiceCancel').onclick=()=>finishVoice(true);
 function startVoice(){
@@ -508,7 +519,7 @@ function startVoice(){
   userStopped=false; voiceFinal=''; voiceInterim=''; voiceRestarts=0; listening=true;
   // optimistic UI: bar + timer show instantly on tap, before the engine confirms
   voiceStart=Date.now(); voiceUI(true); clearInterval(voiceTickInt); voiceTickInt=setInterval(voiceTick,500);
-  recog=new SR(); recog.lang=navigator.language||'en-US';
+  recog=new SR(); recog.lang=voiceLang();
   recog.continuous=true; recog.interimResults=true; // stream partials live; stop ONLY on mic tap
   recog.onstart=()=>{ listening=true; voiceStart=Date.now(); };
   recog.onresult=(e)=>{
@@ -718,7 +729,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v37';
+const APP_VER = 'v38';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
