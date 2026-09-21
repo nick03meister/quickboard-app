@@ -437,7 +437,7 @@ $('importFile').addEventListener('change',(e)=>{
   r.onload=()=>{
     try{
       const j=JSON.parse(r.result);
-      if(j.boards&&j.cards){ if(!confirm('Replace ALL data with this backup?'))return; state=j; if(!state.activeBoardId)state.activeBoardId=state.boards[0].id; save(); render(); }
+      if(j.boards&&j.cards){ takeSnapshot('pre-import'); if(!confirm('Replace ALL data with this backup? (current state auto-saved first)'))return; state=j; if(!state.activeBoardId)state.activeBoardId=state.boards[0].id; save(); render(); }
       else alert('Not a QuickBoard JSON backup');
     }catch{ // treat as text lines
       $('importText').value=r.result.slice(0,20000);
@@ -506,7 +506,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v27';
+const APP_VER = 'v28';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -615,6 +615,7 @@ window.addEventListener('focus', ()=>{ if(window._qbDb) pullFromCloud(true); });
 /* ——— Manchester United fixtures (live via OpenLigaDB, free, no key) ——— */
 const UTD_API = 'https://api.openligadb.de/getmatchdata/pl/2026';
 const UTD_CACHE_KEY = 'quickboard.united.v1';
+const UTD_CACHE_TTL = 3*3600*1000; // 3h (feed is slow to finalize results)
 // Offline fallback: next fixtures as of Sep 2026 (refreshed from live API when online)
 const UTD_FALLBACK = [
   {d:'2026-09-20', h:'Fulham FC', a:'Manchester United FC', s:''},
@@ -628,10 +629,10 @@ const shortTeam = (n)=> (n||'').replace(' FC','').replace(' F.C.','').replace('M
 const fmtD = (iso)=>{ try{ const d=new Date(iso.length<=10?iso+'T12:00:00':iso); return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});}catch{ return iso; } };
 async function loadUnited(){
   const nextEl=$('unitedNext'), listEl=$('unitedList'), cntEl=$('unitedCount');
-  let games=null;
+  let games=null, gamesTs=0;
   try{
     const cached=JSON.parse(localStorage.getItem(UTD_CACHE_KEY)||'null');
-    if(cached && Date.now()-cached.ts < 12*3600*1000) games=cached.games;
+    if(cached && Date.now()-cached.ts < UTD_CACHE_TTL){ games=cached.games; gamesTs=cached.ts; }
   }catch{}
   const renderUtd=(g)=>{
     if(!g||!g.length){ nextEl.textContent='Fixtures unavailable offline'; return; }
@@ -639,9 +640,12 @@ async function loadUnited(){
     const done=g.filter(x=>x.fin && x.d<=today).sort((a,b)=>a.d<b.d?1:-1);
     const todo=g.filter(x=>!x.fin && x.d>=today).sort((a,b)=>a.d<b.d?-1:1);
     const last=done[0], next=todo[0];
+    // Feed is slow to finalize: most recent past game may have no result yet — show it as pending, not vanished.
+    const pending=g.filter(x=>!x.fin && x.d<today).sort((a,b)=>a.d<b.d?1:-1)[0];
     let html='';
     if(next) html+=`<span class="u-row"><span class="u-tag next">NEXT</span><b>${shortTeam(next.h)} vs ${shortTeam(next.a)}</b><span class="u-when">${next.d===today?'· today':('· '+fmtD(next.d))}</span></span>`;
-    if(last) html+=`<span class="u-row dim"><span class="u-tag">LAST</span>${shortTeam(last.h)} ${last.s} ${shortTeam(last.a)}</span>`;
+    if(pending && (!last || pending.d>last.d)) html+=`<span class="u-row dim"><span class="u-tag">LATEST</span>${shortTeam(pending.h)} vs ${shortTeam(pending.a)} · result awaited</span>`;
+    else if(last) html+=`<span class="u-row dim"><span class="u-tag">LAST</span>${shortTeam(last.h)} ${last.s} ${shortTeam(last.a)}</span>`;
     nextEl.innerHTML=html;
     if(next && next.d===today){ cntEl.textContent='🔴 MATCHDAY'; cntEl.classList.add('live'); }
     else if(next){ const days=Math.round((new Date(next.d)-new Date(today))/86400000); cntEl.textContent=days<=1?'⏳ Tomorrow':`⏳ ${days} days`; cntEl.classList.remove('live'); }
@@ -649,7 +653,12 @@ async function loadUnited(){
     listEl.querySelectorAll('.tap').forEach(el=>{
       el.onclick=()=>createMatchdayCard(todo.slice(0,7)[+el.dataset.i]);
     });
+    const upd = gamesTs ? new Date(gamesTs).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : 'offline list';
+    listEl.innerHTML+=`<span class="u-upd" id="uUpd" title="Tap badge or here to refresh fixtures">upd ${upd} ↻</span>`;
+    const uu=$('uUpd'); if(uu) uu.onclick=()=>forceUtdRefresh();
   };
+  const badge=document.querySelector('.united-badge'); if(badge) badge.onclick=()=>forceUtdRefresh();
+  function forceUtdRefresh(){ try{localStorage.removeItem(UTD_CACHE_KEY);}catch{} gamesTs=0; loadUnited(); }
   if(games) renderUtd(games);
   else renderUtd(UTD_FALLBACK.map(x=>({d:x.d,h:x.h,a:x.a,s:x.s,fin:false})));
   try{
@@ -661,7 +670,7 @@ async function loadUnited(){
       let cd=''; if(dt>=todayStr()){ const ms=new Date(dt)-new Date(todayStr()); const dd=Math.floor(ms/86400000); cd=dd===0?'today':dd+'d'; }
       return {d:dt,h:m.team1.teamName,a:m.team2.teamName,s,fin:!!m.matchIsFinished,cd};
     });
-    if(g.length){ games=g; try{localStorage.setItem(UTD_CACHE_KEY,JSON.stringify({ts:Date.now(),games:g}));}catch{} renderUtd(g); }
+    if(g.length){ games=g; gamesTs=Date.now(); try{localStorage.setItem(UTD_CACHE_KEY,JSON.stringify({ts:gamesTs,games:g}));}catch{} renderUtd(g); }
   }catch(e){ /* offline — fallback already shown */ }
 }
 function createMatchdayCard(x){
