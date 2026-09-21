@@ -490,7 +490,7 @@ function maybeCollapseQa(){ if(!$('quickInput').value) $('quickadd').classList.r
 $('quickInput').addEventListener('focus',()=>{ expandQa(); refreshQaMeta(); });
 $('quickInput').addEventListener('blur',()=>{ setTimeout(maybeCollapseQa,150); });
 /* voice capture — Wispr-style: continuous, persistent, stops only on mic tap */
-let recog=null, listening=false, userStopped=false, voiceFinal='', voiceTickInt=null, voiceStart=0, voiceRestarts=0;
+let recog=null, listening=false, userStopped=false, voiceFinal='', voiceInterim='', voiceTickInt=null, voiceStart=0, voiceRestarts=0, voiceCommitT=null;
 function voiceUI(on){
   $('voiceBtn').classList.toggle('listening', on);
   $('voiceBar').classList.toggle('hidden', !on);
@@ -515,6 +515,7 @@ function startVoice(){
       const t=e.results[i][0].transcript;
       if(e.results[i].isFinal) voiceFinal+=t+' '; else interim+=t;
     }
+    voiceInterim=interim;
     $('voiceLive').textContent=(voiceFinal+interim).trim()||'Listening…';
     const vl=$('voiceLive'); vl.scrollLeft=vl.scrollWidth; // track latest words, not the first line
   };
@@ -533,16 +534,21 @@ function startVoice(){
   };
   try{ recog.start(); }catch{ alert('Could not start voice input.'); }
 }
-function finishVoice(cancelled){
-  userStopped=true;
-  try{ if(recog) recog.stop(); }catch{}
-  listening=false; clearInterval(voiceTickInt); voiceUI(false);
-  const txt=voiceFinal.trim();
-  voiceFinal='';
+function commitVoice(cancelled){
+  let txt=voiceFinal.trim()||voiceInterim.trim();
+  voiceFinal=''; voiceInterim='';
   if(cancelled||!txt) return;
   const inp=$('quickInput');
   inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+txt+' ';
   expandQa(); inp.focus();
+}
+function finishVoice(cancelled){
+  userStopped=true;
+  try{ if(recog) recog.stop(); }catch{}
+  listening=false; clearInterval(voiceTickInt); voiceUI(false);
+  clearTimeout(voiceCommitT);
+  // stop() flushes pending finals ~instantly; wait a beat so newest words aren't lost
+  voiceCommitT=setTimeout(()=>commitVoice(cancelled), cancelled?0:800);
 }
 function doQuickAdd(){
   const inp=$('quickInput'); const v=inp.value.trim(); if(!v)return;
@@ -562,6 +568,7 @@ $('quickAddBtn').onclick=doQuickAdd;
 $('quickInput').addEventListener('keydown',(e)=>{
   if(e.key!=='Enter') return;
   if(listening){ e.preventDefault(); finishVoice(false); return; } // Enter ends recording into the text box
+  if(voiceCommitT){ clearTimeout(voiceCommitT); voiceCommitT=null; commitVoice(false); } // flush pending dictation first
   doQuickAdd();
 });
 document.addEventListener('keydown',(e)=>{
@@ -709,7 +716,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v35';
+const APP_VER = 'v36';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
