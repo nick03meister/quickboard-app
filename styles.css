@@ -48,7 +48,13 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .qa-row.main input[type="text"]{flex:1;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-size:15px;box-shadow:0 1px 3px rgba(28,10,10,.06)}
 .qa-row.main input[type="text"]:focus{border-color:var(--united);outline:none;box-shadow:0 0 0 3px rgba(218,41,28,.12)}
 .btn.voice{border-radius:12px;background:#fff}
-.btn.voice.listening{background:#fee2e2;border-color:#fca5a5;animation:pulse 1.2s infinite}
+.btn.voice.listening{background:#b81d12;border-color:#8f1008;color:#fff;animation:recpulse 1.1s ease-in-out infinite}
+.voice-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:70;display:flex;align-items:center;gap:10px;background:rgba(20,3,3,.94);color:#fff;border:1px solid rgba(255,184,28,.55);border-radius:999px;padding:10px 16px;box-shadow:0 12px 32px rgba(0,0,0,.45);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);max-width:min(92vw,560px)}
+.rec-dot{width:12px;height:12px;border-radius:50%;background:#ef4444;flex:0 0 auto;animation:recpulse 1.1s ease-in-out infinite}
+@keyframes recpulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.55);opacity:.5}}
+#voiceTimer{font-variant-numeric:tabular-nums;font-weight:800;flex:0 0 auto}
+#voiceLive{opacity:.85;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:44vw}
+#voiceBar .mini{flex:0 0 auto}
 .qa-row.details{display:none;margin-top:8px;align-items:center;flex-wrap:wrap}
 .quickadd.expanded .qa-row.details{display:flex}
 .qa-target{font-size:12.5px}

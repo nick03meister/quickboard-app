@@ -489,23 +489,60 @@ function expandQa(){ $('quickadd').classList.add('expanded'); }
 function maybeCollapseQa(){ if(!$('quickInput').value) $('quickadd').classList.remove('expanded'); }
 $('quickInput').addEventListener('focus',()=>{ expandQa(); refreshQaMeta(); });
 $('quickInput').addEventListener('blur',()=>{ setTimeout(maybeCollapseQa,150); });
-/* voice capture */
-let recog=null, listening=false;
-$('voiceBtn').onclick=()=>{
+/* voice capture — Wispr-style: continuous, persistent, stops only on mic tap */
+let recog=null, listening=false, userStopped=false, voiceFinal='', voiceTickInt=null, voiceStart=0, voiceRestarts=0;
+function voiceUI(on){
+  $('voiceBtn').classList.toggle('listening', on);
+  $('voiceBar').classList.toggle('hidden', !on);
+  if(on){ $('voiceLive').textContent='Listening… speak now'; $('voiceTimer').textContent='0:00'; }
+}
+function voiceTick(){
+  const s=Math.floor((Date.now()-voiceStart)/1000);
+  $('voiceTimer').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+$('voiceBtn').onclick=()=>{ listening?finishVoice(false):startVoice(); };
+$('voiceCancel').onclick=()=>finishVoice(true);
+function startVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ alert('Voice input not supported in this browser — try Chrome.'); return; }
-  if(listening){ try{recog.stop();}catch{} return; }
-  recog=new SR(); recog.lang=navigator.language||'en-US'; recog.interimResults=false;
-  recog.onstart=()=>{ listening=true; $('voiceBtn').classList.add('listening'); };
-  recog.onend=()=>{ listening=false; $('voiceBtn').classList.remove('listening'); };
-  recog.onerror=()=>{ listening=false; $('voiceBtn').classList.remove('listening'); };
+  userStopped=false; voiceFinal=''; voiceRestarts=0;
+  recog=new SR(); recog.lang=navigator.language||'en-US';
+  recog.continuous=true; recog.interimResults=true; // keep going through pauses; stop ONLY on mic tap
+  recog.onstart=()=>{ listening=true; voiceStart=Date.now(); voiceUI(true); clearInterval(voiceTickInt); voiceTickInt=setInterval(voiceTick,500); };
   recog.onresult=(e)=>{
-    const txt=e.results[0][0].transcript;
-    const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+txt+' ';
-    expandQa(); inp.focus();
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal) voiceFinal+=t+' '; else interim+=t;
+    }
+    $('voiceLive').textContent=(voiceFinal+interim).trim()||'Listening…';
+  };
+  recog.onerror=(e)=>{
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      userStopped=true;
+      alert('Mic blocked — allow microphone access, then try again.');
+    }
+    // other errors (no-speech, network blips): onend auto-restarts below
+  };
+  recog.onend=()=>{
+    if(userStopped) return;
+    voiceRestarts++;
+    if(voiceRestarts<25){ try{recog.start();}catch{} } // resume automatically
+    else finishVoice(false);
   };
   try{ recog.start(); }catch{ alert('Could not start voice input.'); }
-};
+}
+function finishVoice(cancelled){
+  userStopped=true;
+  try{ if(recog) recog.stop(); }catch{}
+  listening=false; clearInterval(voiceTickInt); voiceUI(false);
+  const txt=voiceFinal.trim();
+  voiceFinal='';
+  if(cancelled||!txt) return;
+  const inp=$('quickInput');
+  inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+txt+' ';
+  expandQa(); inp.focus();
+}
 function doQuickAdd(){
   const inp=$('quickInput'); const v=inp.value.trim(); if(!v)return;
   const p=parseQuick(v);
@@ -667,7 +704,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v31';
+const APP_VER = 'v32';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
