@@ -490,7 +490,7 @@ function maybeCollapseQa(){ if(!$('quickInput').value) $('quickadd').classList.r
 $('quickInput').addEventListener('focus',()=>{ expandQa(); refreshQaMeta(); });
 $('quickInput').addEventListener('blur',()=>{ setTimeout(maybeCollapseQa,150); });
 /* voice capture — Wispr-style: continuous, persistent, stops only on mic tap */
-let recog=null, listening=false, userStopped=false, voiceFinal='', voiceInterim='', voiceTickInt=null, voiceStart=0, voiceRestarts=0, voiceCommitT=null;
+let recog=null, listening=false, userStopped=false, voiceFinal='', voiceInterim='', voiceTickInt=null, voiceStart=0, voiceRestarts=0, voiceCommitT=null, voiceWatchInt=null, lastVoiceAt=0;
 function voiceUI(on){
   $('voiceBtn').classList.toggle('listening', on);
   $('voiceBar').classList.toggle('hidden', !on);
@@ -521,8 +521,9 @@ function startVoice(){
   voiceStart=Date.now(); voiceUI(true); clearInterval(voiceTickInt); voiceTickInt=setInterval(voiceTick,500);
   recog=new SR(); recog.lang=voiceLang();
   recog.continuous=true; recog.interimResults=true; // stream partials live; stop ONLY on mic tap
-  recog.onstart=()=>{ listening=true; voiceStart=Date.now(); };
+  recog.onstart=()=>{ listening=true; voiceStart=Date.now(); lastVoiceAt=Date.now(); };
   recog.onresult=(e)=>{
+    lastVoiceAt=Date.now(); voiceRestarts=0; // progress resets the stall counter
     let interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
       const t=e.results[i][0].transcript;
@@ -541,10 +542,20 @@ function startVoice(){
   };
   recog.onend=()=>{
     if(userStopped) return;
-    voiceRestarts++;
-    if(voiceRestarts<25){ try{recog.start();}catch{} } // resume automatically
-    else finishVoice(false);
+    // resume with a beat — immediate restart often throws InvalidState on mobile
+    setTimeout(()=>{
+      if(userStopped) return;
+      voiceRestarts++;
+      try{ recog.start(); }
+      catch{ setTimeout(()=>{ if(!userStopped){ try{recog.start();}catch{} } },900); }
+    },350);
   };
+  // watchdog: if the engine goes quiet >10s while recording, kick it
+  clearInterval(voiceWatchInt);
+  voiceWatchInt=setInterval(()=>{
+    if(!listening||userStopped) return;
+    if(Date.now()-lastVoiceAt>10000){ lastVoiceAt=Date.now(); try{recog.stop();}catch{} }
+  },4000);
   try{ recog.start(); }catch{ listening=false; clearInterval(voiceTickInt); voiceUI(false); alert('Could not start voice input.'); }
 }
 function commitVoice(cancelled){
@@ -558,7 +569,7 @@ function commitVoice(cancelled){
 function finishVoice(cancelled){
   userStopped=true;
   try{ if(recog) recog.stop(); }catch{}
-  listening=false; clearInterval(voiceTickInt); voiceUI(false);
+  listening=false; clearInterval(voiceTickInt); clearInterval(voiceWatchInt); voiceUI(false);
   clearTimeout(voiceCommitT);
   // stop() flushes pending finals ~instantly; wait a beat so newest words aren't lost
   voiceCommitT=setTimeout(()=>commitVoice(cancelled), cancelled?0:800);
@@ -729,7 +740,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v38';
+const APP_VER = 'v39';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
