@@ -76,6 +76,9 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .chip.pri-high{background:#0f172a;color:#fff}
 .chip.pri-med{background:#e0f2fe;border-color:#bae6fd}
 .chip.pri-low{background:#f8fafc}
+.chip.board-chip{background:#fef3c7;border-color:#fcd34d;color:#92400e;font-weight:700}
+.chip.tag-chip{cursor:pointer}
+.chip.tag-chip:hover{border-color:var(--united);color:#b81d12}
 .card-foot{display:flex;gap:6px;margin-top:8px}
 .mini{font-size:12px;border:1px solid var(--line);background:#f8fafc;border-radius:8px;padding:4px 8px;cursor:pointer}
 .mini:hover{background:#e2e8f0}

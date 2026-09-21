@@ -138,15 +138,37 @@ const boardEl = $('board'), tabsEl = $('boardTabs');
 function render(){
   renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats();
 }
+function boardProgress(b){
+  const all=boardCards(b.id); if(!all.length) return 0;
+  const last=b.columns[b.columns.length-1]?.id;
+  return Math.round(100*all.filter(c=>c.colId===last).length/all.length);
+}
+function tabFill(p, active){
+  return active
+    ? `background:linear-gradient(90deg,rgba(255,184,28,.6) ${p}%,var(--united) ${p}%);`
+    : `background:linear-gradient(90deg,rgba(218,41,28,.20) ${p}%,#f8fafc ${p}%);`;
+}
 function renderTabs(){
   tabsEl.innerHTML='';
+  const isAll=state.activeBoardId==='__all';
+  const allCount=state.cards.length;
+  const allP=state.cards.length?Math.round(100*state.cards.filter(c=>{const b=state.boards.find(x=>x.id===c.boardId);return b&&b.columns.length&&b.columns[b.columns.length-1].id===c.colId;}).length/state.cards.length):0;
+  const allBtn=document.createElement('div');
+  allBtn.className='board-tab'+(isAll?' active':'');
+  allBtn.style.cssText=tabFill(allP,isAll);
+  allBtn.title=`All boards — ${allP}% in Done`;
+  allBtn.innerHTML=`<span>All</span> <span class="cnt" style="opacity:.6;font-weight:400">(${allCount})</span>`;
+  allBtn.onclick=()=>{ state.activeBoardId='__all'; save(true); render(); };
+  tabsEl.appendChild(allBtn);
   state.boards.forEach(b=>{
     const n = boardCards(b.id).length;
+    const p = boardProgress(b);
     const btn = document.createElement('div');
     btn.className = 'board-tab' + (b.id===state.activeBoardId?' active':'');
+    btn.style.cssText = tabFill(p, b.id===state.activeBoardId);
     btn.innerHTML = `<span></span> <span class="cnt" style="opacity:.6;font-weight:400">(${n})</span>`;
     btn.firstChild.textContent = b.name;
-    btn.title = 'Double-click to rename';
+    btn.title = `${b.name} — ${p}% in Done (double-click to rename)`;
     btn.onclick = ()=>{ state.activeBoardId=b.id; save(true); render(); };
     btn.ondblclick = ()=>{
       const nn = prompt('Rename board:', b.name);
@@ -174,7 +196,46 @@ function cardMatches(c, f){
   if(f.q){ const hay = (c.title+' '+c.details+' '+c.tags.join(' ')).toLowerCase(); if(!hay.includes(f.q)) return false; }
   return true;
 }
+/* ——— All board: virtual aggregate across real boards ——— */
+function unionColNames(){
+  const order=[];
+  state.boards.forEach(b=>b.columns.forEach(c=>{ if(!order.includes(c.name)) order.push(c.name); }));
+  return order.length?order:['Inbox'];
+}
+function realColFor(boardId, colName){
+  const b=state.boards.find(x=>x.id===boardId); if(!b) return null;
+  return b.columns.find(c=>c.name===colName)||b.columns[0]||null;
+}
+function renderAllBoard(){
+  const f=currentFilters();
+  boardEl.innerHTML='';
+  unionColNames().forEach(name=>{
+    const colDiv=document.createElement('div');
+    colDiv.className='col'; colDiv.dataset.colName=name;
+    const cards=state.cards.filter(c=>{
+      const rc=realColFor(c.boardId,name); if(!rc||c.colId!==rc.id) return false;
+      return cardMatches(c,f);
+    }).sort((a,c2)=>(a.due||'9999')<(c2.due||'9999')?-1:1);
+    colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span></div><div class="cards"></div>`;
+    colDiv.querySelector('.col-name').textContent=name;
+    colDiv.ondragover=(e)=>{e.preventDefault();colDiv.classList.add('drag-over');};
+    colDiv.ondragleave=()=>colDiv.classList.remove('drag-over');
+    colDiv.ondrop=(e)=>{
+      e.preventDefault();colDiv.classList.remove('drag-over');
+      const id=e.dataTransfer.getData('text/card-id');if(!id)return;
+      const card=state.cards.find(c=>c.id===id);if(!card)return;
+      const rc=realColFor(card.boardId,name);if(rc){card.colId=rc.id;save();render();}
+    };
+    const list=colDiv.querySelector('.cards');
+    cards.forEach(c=>{
+      const rb=state.boards.find(x=>x.id===c.boardId);
+      if(rb) list.appendChild(cardNode(c,rb,0));
+    });
+    boardEl.appendChild(colDiv);
+  });
+}
 function renderBoard(){
+  if(state.activeBoardId==='__all'){ renderAllBoard(); return; }
   const b = activeBoard();
   if(!b){ boardEl.innerHTML='<p class="muted">No boards. Create one.</p>'; return; }
   const f = currentFilters();
@@ -232,9 +293,14 @@ function cardNode(c, board, colIdx){
   d.className='card'; d.draggable=true; d.dataset.cardId=c.id;
   const pri = c.priority?`<span class="chip pri-${c.priority}">${c.priority==='high'?'🔴 high':c.priority==='med'?'🟡 med':'🟢 low'}</span>`:'';
   const isDone = board.columns.length>0 && board.columns[board.columns.length-1].id===c.colId;
+  const inAll = state.activeBoardId==='__all';
   d.innerHTML=`<div class="card-title"></div>${c.details?'<div class="card-details"></div>':''}
-    <div class="chips">${c.tags.map(t=>`<span class="chip">#${t}</span>`).join('')}${pri}${dueChip(c)}</div>
+    <div class="chips">${inAll?`<span class="chip board-chip"></span>`:''}${c.tags.map(t=>`<span class="chip tag-chip" data-tag="${t}" title="Filter by #${t}">#${t}</span>`).join('')}${pri}${dueChip(c)}</div>
     <div class="card-foot"><button class="mini" data-a="edit">Edit</button><button class="mini" data-a="left" title="Move card left">←</button><button class="mini" data-a="right" title="Move card right">→</button><button class="mini${isDone?' done-on':''}" data-a="done" title="${isDone?'Done ✓':'Send card to Done'}">✓</button><button class="mini del" data-a="delcard" title="Delete this card">🗑️</button></div>`;
+  if(inAll) d.querySelector('.board-chip').textContent='📋 '+board.name;
+  d.querySelectorAll('.tag-chip').forEach(el=>{
+    el.onclick=(e)=>{ e.stopPropagation(); $('filterTag').value=el.dataset.tag; renderBoard(); };
+  });
   d.querySelector('.card-title').textContent=c.title;
   if(c.details) d.querySelector('.card-details').textContent=c.details;
   // escape tag chips already safe (tags sanitized lowercase alnum)
@@ -261,11 +327,17 @@ function renderTagFilter(){
   if(all.has(cur)) sel.value=cur;
 }
 function renderStats(){
+  if(state.activeBoardId==='__all'){
+    const over=state.cards.filter(c=>c.due&&isOverdue(c.due)).length;
+    $('statsLine').textContent=`All boards: ${state.cards.length} cards • ${over} overdue • ${state.boards.length} boards`;
+    return;
+  }
   const b=activeBoard(); if(!b)return;
   const all=boardCards(b.id); const over=all.filter(c=>c.due&&isOverdue(c.due)).length;
   $('statsLine').textContent=`${b.name}: ${all.length} cards • ${over} overdue • ${state.boards.length} boards`;
 }
 function updateCredsBanner(){
+  if(state.activeBoardId==='__all'){ $('credsBanner').classList.add('hidden'); return; }
   const b=activeBoard();
   const dismissed = localStorage.getItem(CREDS_DISMISS)==='1';
   $('credsBanner').classList.toggle('hidden', !(b && b.name.toLowerCase().includes('credential') && !dismissed));
@@ -414,10 +486,19 @@ $('mDelete').onclick=()=>{
 // --- import / export ---
 $('importBtn').onclick=()=>{
   $('importBoard').innerHTML=state.boards.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
-  $('importBoard').value=state.activeBoardId;
+  $('importBoard').value=(state.activeBoardId==='__all'?(state.boards[0]&&state.boards[0].id):state.activeBoardId);
   $('importModal').classList.remove('hidden');
 };
 $('importCancel').onclick=()=>$('importModal').classList.add('hidden');
+$('pasteClipBtn').onclick=async ()=>{
+  try{
+    const t=await navigator.clipboard.readText();
+    if(!t){ alert('Clipboard is empty — copy your Apple Notes first.'); return; }
+    const ta=$('importText');
+    ta.value=(ta.value?ta.value.replace(/\s+$/,'')+'\n':'')+t;
+    ta.focus();
+  }catch{ alert('Clipboard blocked — allow access or paste manually with ⌘V / long-press.'); }
+};
 $('importGo').onclick=()=>{
   const boardId=$('importBoard').value; const b=state.boards.find(x=>x.id===boardId); if(!b)return;
   const lines=$('importText').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -506,7 +587,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v28';
+const APP_VER = 'v29';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
