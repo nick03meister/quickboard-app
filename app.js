@@ -399,6 +399,86 @@ function toggleUtd(force){
 (function initUtdCollapsed(){
   try{ if(localStorage.getItem('qb.united.open')!=='1'){ const b=$('unitedBar'); if(b) b.classList.add('collapsed'); } }catch{}
 })();
+/* ——— meeting-intel: parse invites pasted into Details ——— */
+const MON={january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12};
+function detectMeeting(text){
+  const t=text||'';
+  const isMeeting=/google meet|zoom\b|teams|webex|video call|joining info|time zone|timezone|meeting|demonstration|\bdemo\b|invite|agenda/i.test(t);
+  const hasTime=/\d{1,2}:\d{2}/.test(t);
+  let dd=0,mm=0,yy=0,yrGiven=false;
+  let m=t.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i)
+       ||t.match(/(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)/i);
+  if(m){
+    if(/[a-z]/i.test(m[1][0])){ mm=MON[m[1].toLowerCase()]; dd=+m[2]; }
+    else { dd=+m[1]; mm=MON[m[2].toLowerCase()]; }
+  } else if((m=t.match(/(\d{1,2})[-\/](\d{1,2})(?:[-\/](\d{2,4}))?/))){
+    dd=+m[1]; mm=+m[2]; if(m[3]){ yy=+m[3]; if(yy<100) yy+=2000; yrGiven=true; }
+  }
+  let due='';
+  if(dd>=1&&dd<=31&&mm>=1&&mm<=12){
+    const cur=new Date().getFullYear();
+    yy=yy||cur;
+    let iso=`${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+    if(iso<todayStr()&&!yrGiven){ yy=cur+1; iso=`${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`; }
+    due=iso;
+  }
+  return {isMeeting, hasTime, due};
+}
+$('mAutofill').onclick=()=>{
+  const r=detectMeeting($('mDetails').value);
+  if(!r.due&&!r.isMeeting){ alert('No date or meeting found in the details.'); return; }
+  if(r.due) $('mDue').value=r.due;
+  if(r.hasTime) $('mPriority').value='high';
+  if(r.isMeeting){
+    const cur=$('mTags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    if(!cur.includes('meetings')) cur.push('meetings');
+    $('mTags').value=cur.join(', ');
+    addPreset('meetings'); renderMPresets();
+  }
+  alert(`Detected: ${r.due?('due '+fmtDate(r.due)):'no date'}${r.hasTime?' · has time → High':''}${r.isMeeting?' · #meetings':''}`);
+};
+/* ——— managed tag vocabulary ——— */
+const PRESET_KEY='quickboard.tagpresets';
+const DEFAULT_PRESETS=['meetings','work','home','urgent','idea','errand','onboarding','manutd','matchday','football'];
+function getPresets(){ try{ const p=JSON.parse(localStorage.getItem(PRESET_KEY)||'null'); if(Array.isArray(p)&&p.length) return p; }catch{} return [...DEFAULT_PRESETS]; }
+function setPresets(p){ try{ localStorage.setItem(PRESET_KEY, JSON.stringify(p)); }catch{} }
+function addPreset(t){ t=sanitizeTag(t); if(!t) return; const p=getPresets(); if(!p.includes(t)){ p.push(t); setPresets(p); } }
+function renderMPresets(){
+  const w=$('mPresetChips'); if(!w) return;
+  const cur=$('mTags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  w.innerHTML='';
+  getPresets().forEach(t=>{
+    const el=document.createElement('span');
+    el.className='smart-tag'+(cur.includes(t)?' on':''); el.textContent='#'+t;
+    el.title='Tap to toggle';
+    el.onclick=()=>{
+      let c=$('mTags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+      c=c.includes(t)?c.filter(x=>x!==t):[...c,t];
+      $('mTags').value=c.join(', '); renderMPresets();
+    };
+    w.appendChild(el);
+  });
+  const add=document.createElement('span'); add.className='smart-tag add'; add.textContent='＋'; add.title='Add new preset tag';
+  add.onclick=()=>{ const v=prompt('New preset tag:'); if(v&&v.trim()){ addPreset(v.trim()); renderMPresets(); renderPresetsMgr(); } };
+  w.appendChild(add);
+}
+function renderPresetsMgr(){
+  const el=$('presetList'); if(!el) return;
+  el.innerHTML='';
+  getPresets().forEach(t=>{
+    const row=document.createElement('div'); row.className='backup-row';
+    row.innerHTML=`<span></span><span style="flex:1"></span>`;
+    row.children[0].textContent='#'+t;
+    const del=document.createElement('button'); del.className='btn small danger'; del.textContent='×';
+    del.onclick=()=>{ setPresets(getPresets().filter(x=>x!==t)); renderPresetsMgr(); };
+    row.appendChild(del); el.appendChild(row);
+  });
+  const row=document.createElement('div'); row.className='backup-row';
+  const inp=document.createElement('input'); inp.placeholder='new tag'; inp.style.cssText='flex:1;border:1px solid var(--line);border-radius:8px;padding:6px 10px';
+  const btn=document.createElement('button'); btn.className='btn small primary'; btn.textContent='Add';
+  btn.onclick=()=>{ if(inp.value.trim()){ addPreset(inp.value.trim()); inp.value=''; renderPresetsMgr(); } };
+  row.appendChild(inp); row.appendChild(btn); el.appendChild(row);
+}
 const qaSugEl=document.createElement('div'); qaSugEl.id='qaSuggest'; qaSugEl.className='qa-suggest hidden';
 document.querySelector('.quickadd').appendChild(qaSugEl);
 let qaSugIdx=0, qaSugList=[];
@@ -466,7 +546,7 @@ function refreshQaMeta(){
   const qt=$('quickTag');
   if(qt){
     const cur=qt.value;
-    const all=[...new Set(state.cards.flatMap(c=>c.tags||[]))].sort();
+    const all=[...new Set([...getPresets(), ...state.cards.flatMap(c=>c.tags||[])])].sort();
     qt.innerHTML='<option value="">#tag</option>'+all.map(t=>`<option value="${t}">#${t}</option>`).join('');
     qt.value=[...qt.options].some(o=>o.value===cur)?cur:'';
     qt.onchange=()=>{
@@ -620,6 +700,7 @@ function openCardModal(id){
   $('mTags').value=(c.tags||[]).join(', '); $('mDue').value=c.due||''; $('mPriority').value=c.priority||'';
   $('mColumn').innerHTML=(b?.columns||[]).map(col=>`<option value="${col.id}">${col.name}</option>`).join('');
   $('mColumn').value=c.colId;
+  renderMPresets();
   $('cardModal').classList.remove('hidden');
 }
 $('mCancel').onclick=()=>$('cardModal').classList.add('hidden');
@@ -711,7 +792,7 @@ $('forcePullBtn').onclick=()=>{
 $('settingsBtn').onclick=()=>{
   const eff = getEffectiveCfg();
   $('firebaseConfig').value = localStorage.getItem(FB_CFG_KEY) || (eff.fromFile ? JSON.stringify(eff.cfg, null, 2) : '');
-  $('settingsModal').classList.remove('hidden'); updateSyncStatus(); renderBackups();
+  $('settingsModal').classList.remove('hidden'); updateSyncStatus(); renderBackups(); renderPresetsMgr();
 };
 $('settingsClose').onclick=()=>$('settingsModal').classList.add('hidden');
 $('credsDismiss').onclick=()=>{localStorage.setItem(CREDS_DISMISS,'1');updateCredsBanner();};
@@ -740,7 +821,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v39';
+const APP_VER = 'v40';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
