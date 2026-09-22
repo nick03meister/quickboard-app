@@ -424,6 +424,19 @@ function detectMeeting(text){
   }
   return {isMeeting, hasTime, due};
 }
+let mDetectT=null;
+function autoDetectModal(){
+  // non-destructive: fills Due only if empty, High only from None/Med defaults, tags only appended
+  const r=detectMeeting($('mDetails').value);
+  if(r.due && !$('mDue').value) $('mDue').value=r.due;
+  if(r.hasTime && ($('mPriority').value===''||$('mPriority').value==='med')) $('mPriority').value='high';
+  if(r.isMeeting){
+    const cur=$('mTags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    if(!cur.includes('meetings')){ $('mTags').value=[...cur,'meetings'].join(', '); addPreset('meetings'); }
+  }
+  renderMPresets();
+}
+$('mDetails').addEventListener('input',()=>{ clearTimeout(mDetectT); mDetectT=setTimeout(autoDetectModal,700); });
 $('mAutofill').onclick=()=>{
   const r=detectMeeting($('mDetails').value);
   if(!r.due&&!r.isMeeting){ alert('No date or meeting found in the details.'); return; }
@@ -701,6 +714,7 @@ function openCardModal(id){
   $('mColumn').innerHTML=(b?.columns||[]).map(col=>`<option value="${col.id}">${col.name}</option>`).join('');
   $('mColumn').value=c.colId;
   renderMPresets();
+  autoDetectModal();
   $('cardModal').classList.remove('hidden');
 }
 $('mCancel').onclick=()=>$('cardModal').classList.add('hidden');
@@ -821,7 +835,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v40';
+const APP_VER = 'v41';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
