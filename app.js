@@ -579,7 +579,11 @@ const QA_TPLS=['#errand !high','due:today !high','due:tomorrow','#idea','@Quick 
   });
 })();
 function expandQa(){ $('quickadd').classList.add('expanded'); }
-function maybeCollapseQa(){ if(!$('quickInput').value) $('quickadd').classList.remove('expanded'); }
+function maybeCollapseQa(){
+  const qa=$('quickadd');
+  if(qa.contains(document.activeElement)) return; // focus moved to date/priority/tag/mic — keep open
+  if(!$('quickInput').value) qa.classList.remove('expanded');
+}
 $('quickInput').addEventListener('focus',()=>{ expandQa(); refreshQaMeta(); });
 $('quickInput').addEventListener('blur',()=>{ setTimeout(maybeCollapseQa,150); });
 /* voice capture — Wispr-style: continuous, persistent, stops only on mic tap */
@@ -835,7 +839,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v41';
+const APP_VER = 'v42';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
