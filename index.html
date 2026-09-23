@@ -9,12 +9,12 @@
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icon-192.png" />
 <link rel="apple-touch-icon" href="./icon-180.png" />
-<link rel="stylesheet" href="./styles.css?v=44" />
+<link rel="stylesheet" href="./styles.css?v=46" />
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo"><img src="./manutd-crest.webp?v=44" alt="Manchester United" /></div>
+    <div class="logo"><img src="./manutd-crest.webp?v=46" alt="Manchester United" /></div>
     <div>
       <div class="brand-title">QuickBoard</div>
       <div class="brand-sub">daily capture • kanban</div>
@@ -22,6 +22,7 @@
   </div>
   <div class="top-actions">
     <input id="searchInput" class="search" type="search" placeholder="Search cards…  ( / )" autocomplete="off" />
+    <span id="searchMeta" class="search-meta" title="Matching cards"></span>
     <select id="filterTag" title="Filter by tag"><option value="">All tags</option></select>
     <select id="filterPriority" title="Filter by priority">
       <option value="">All priorities</option>
@@ -36,6 +37,8 @@
       <option value="week">Next 7 days</option>
       <option value="nodate">No date</option>
     </select>
+    <button id="undoBtn" class="btn ghost" title="Undo last change (Ctrl+Z)" disabled>↩</button>
+    <button id="selectBtn" class="btn ghost" title="Select multiple cards to delete">Select</button>
     <button id="syncNowBtn" class="btn ghost" title="Pull latest from cloud now">⟳</button>
     <button id="importBtn" class="btn ghost" title="Import from Apple Notes / text / JSON">Import</button>
     <button id="exportBtn" class="btn ghost" title="Export / backup">Export</button>
@@ -81,7 +84,7 @@
 </section>
 
 <section id="unitedBar" class="united-bar">
-  <div class="united-badge"><img src="./manutd-crest.webp?v=44" alt="MUFC" /></div>
+  <div class="united-badge"><img src="./manutd-crest.webp?v=46" alt="MUFC" /></div>
   <div class="united-next" id="unitedNext">Loading United fixtures…</div>
   <div class="united-count" id="unitedCount"></div>
   <div class="united-list" id="unitedList"></div>
@@ -93,7 +96,7 @@
 <footer class="footer">
   <span id="statsLine">—</span>
   <span class="dot">•</span>
-  <span id="verLine">v44 • checking sync…</span>
+  <span id="verLine">v46 • checking sync…</span>
   <span class="dot">•</span>
   <span>Add to Home Screen on Samsung for app mode</span>
 </footer>
@@ -131,6 +134,10 @@
       <span class="muted">one-tap from Apple Notes</span>
     </div>
     <textarea id="importText" rows="10" placeholder="Paste here…&#10;Call plumber #home due:tomorrow&#10;Onboarding: get VPN access #onboarding !high&#10;WiFi password hint - router in hall"></textarea>
+    <div class="row" style="margin:8px 0 0">
+      <label class="muted" style="display:flex;gap:6px;align-items:center;font-weight:600"><input id="importSingle" type="checkbox" style="width:auto" /> Whole paste = 1 card (first line title, rest details)</label>
+      <span class="muted" id="importCount"></span>
+    </div>
     <div class="grid2">
       <label>Target board<select id="importBoard"></select></label>
       <label>Or import JSON backup<input id="importFile" type="file" accept=".json,.txt" /></label>
@@ -211,8 +218,16 @@
   <button id="voiceCancel" class="mini del" title="Discard recording">✕</button>
 </div>
 
-<script src="./firebase-config.js?v=44"></script>
-<script src="./app.js?v=44"></script>
+<div id="selBar" class="sel-bar hidden">
+  <span id="selCount">0 selected</span>
+  <button id="selAllBtn" class="mini" title="Select all visible cards">All</button>
+  <button id="selNoneBtn" class="mini" title="Clear selection">None</button>
+  <button id="selDelBtn" class="mini del" title="Delete selected cards">Delete</button>
+  <button id="selDoneBtn" class="mini" title="Exit select mode">Done</button>
+</div>
+
+<script src="./firebase-config.js?v=46"></script>
+<script src="./app.js?v=46"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

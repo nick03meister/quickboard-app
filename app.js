@@ -54,18 +54,54 @@ function healState(){
   });
   return fixed;
 }
-function save(localOnly){
+// --- undo: pre-change snapshots, captured automatically on every real mutation ---
+const undoStack=[];
+function save(localOnly, skipUndo){
+  if(!skipUndo){
+    try{
+      const prev=localStorage.getItem(LS_KEY);
+      if(prev){
+        // navigation-only saves (tab switches) don't change content — don't pollute undo
+        const po=JSON.parse(prev);
+        if(JSON.stringify({b:po.boards,c:po.cards})!==JSON.stringify({b:state.boards,c:state.cards})){
+          undoStack.push(prev); if(undoStack.length>15) undoStack.shift();
+        }
+      }
+    }catch{}
+  }
   healState();
   state._ts = Date.now();
   localStorage.setItem(LS_KEY, JSON.stringify(state));
   renderStats();
+  refreshUndoBtn();
   if(!localOnly) pushToCloud();
 }
+function refreshUndoBtn(){ const b=$('undoBtn'); if(b) b.disabled=!undoStack.length; }
+function doUndo(){
+  const prev=undoStack.pop(); refreshUndoBtn();
+  if(!prev){ toast('Nothing to undo'); return; }
+  takeSnapshot('pre-undo'); // worst-case safety net in backups
+  try{ state=JSON.parse(prev); }catch{ toast('Undo failed'); return; }
+  if(!state.activeBoardId) state.activeBoardId=state.boards[0]?.id;
+  healState(); save(true,true); render(); refreshUndoBtn();
+  toast('Undone ✓');
+}
+$('undoBtn').onclick=doUndo;
 const sanitizeTag = (s)=>s.toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20);
 const tidy = (t)=> t.split('\n').map(s=>s.replace(/[ \t]{2,}/g,' ').trim()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
 
+// --- list markers (Apple Notes / markdown paste: "- [ ] task", "• item", "1. item") ---
+function stripListMarker(line){
+  let checked=false;
+  let t=String(line||'').replace(/^\s*(?:[-*+•·●○◦▪▶‣⁃]|\d{1,3}[.)])\s+/,'');
+  if(/^\s*\[[xX]\]\s*/.test(t)) checked=true;
+  t=t.replace(/^\s*\[[ xX]\]\s*/,'');
+  return {text:t, checked};
+}
+
 // --- quick parse ---
 function parseQuick(text){
+  text = stripListMarker(text).text;
   let tags = [];
   let priority = document.getElementById('quickPriority').value || '';
   let due = document.getElementById('quickDue').value || '';
@@ -137,14 +173,63 @@ const $ = (id)=>document.getElementById(id);
 const boardEl = $('board'), tabsEl = $('boardTabs');
 
 function render(){
-  renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats(); refreshQaMeta();
+  renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats(); refreshQaMeta(); refreshSearchMeta(); refreshUndoBtn(); renderSelBar();
 }
+// --- search result count + cross-board hint ---
+function refreshSearchMeta(){
+  const el=$('searchMeta'); if(!el) return;
+  const f=currentFilters();
+  if(!f.q&&!f.tag&&!f.pri&&!f.due){ el.textContent=''; el.onclick=null; el.classList.remove('link'); return; }
+  const match=(c)=>cardMatches(c,f);
+  if(state.activeBoardId==='__all'){
+    const n=state.cards.filter(match).length;
+    el.textContent=`${n} match${n===1?'':'es'}`; el.onclick=null; el.classList.remove('link');
+  } else {
+    const b=activeBoard();
+    const here=state.cards.filter(c=>c.boardId===b?.id&&match(c)).length;
+    const away=state.cards.filter(c=>c.boardId!==b?.id&&match(c)).length;
+    el.textContent = away?`${here} here · ${away} elsewhere — view`:`${here} match${here===1?'':'es'}`;
+    el.onclick = away?()=>{ state.activeBoardId='__all'; save(true); render(); }:null;
+    el.classList.toggle('link',!!away);
+  }
+}
+// --- multi-select (bulk delete) ---
+let selectMode=false; const selected=new Set();
+function setSelectMode(on){
+  selectMode=on; selected.clear();
+  document.body.classList.toggle('selecting',on);
+  $('selectBtn').classList.toggle('on',on);
+  renderSelBar(); render();
+}
+function renderSelBar(){
+  const bar=$('selBar'); if(!bar) return;
+  bar.classList.toggle('hidden',!selectMode);
+  $('selCount').textContent=`${selected.size} selected`;
+  $('selDelBtn').disabled=!selected.size;
+}
+$('selectBtn').onclick=()=>setSelectMode(!selectMode);
+$('selAllBtn').onclick=()=>{
+  document.querySelectorAll('#board .card').forEach(el=>{ if(el.dataset.cardId) selected.add(el.dataset.cardId); });
+  renderSelBar(); render();
+};
+$('selNoneBtn').onclick=()=>{ selected.clear(); renderSelBar(); render(); };
+$('selDelBtn').onclick=()=>{
+  if(!selected.size) return;
+  if(!confirm(`Delete ${selected.size} card${selected.size>1?'s':''}? (Undo available)`)) return;
+  state.cards=state.cards.filter(c=>!selected.has(c.id));
+  selected.clear(); setSelectMode(false); save(); render();
+  toast('Deleted ✓ — Undo available');
+};
+$('selDoneBtn').onclick=()=>setSelectMode(false);
 function boardProgress(b){
   const all=boardCards(b.id); if(!all.length) return 0;
   const last=b.columns[b.columns.length-1]?.id;
   return Math.round(100*all.filter(c=>c.colId===last).length/all.length);
 }
-function tabFill(p, active){
+function tabFill(p, active, doneAll){
+  if(doneAll) return active
+    ? `background:linear-gradient(90deg,#16a34a ${p}%,#065f46 ${p}%);color:#fff;border-color:#065f46;`
+    : `background:linear-gradient(90deg,rgba(22,163,74,.45) ${p}%,#f0fdf4 ${p}%);border-color:#86efac;`;
   return active
     ? `background:linear-gradient(90deg,rgba(255,184,28,.6) ${p}%,var(--united) ${p}%);`
     : `background:linear-gradient(90deg,rgba(218,41,28,.20) ${p}%,#f8fafc ${p}%);`;
@@ -156,7 +241,7 @@ function renderTabs(){
   const allP=state.cards.length?Math.round(100*state.cards.filter(c=>{const b=state.boards.find(x=>x.id===c.boardId);return b&&b.columns.length&&b.columns[b.columns.length-1].id===c.colId;}).length/state.cards.length):0;
   const allBtn=document.createElement('div');
   allBtn.className='board-tab'+(isAll?' active':'');
-  allBtn.style.cssText=tabFill(allP,isAll);
+  allBtn.style.cssText=tabFill(allP,isAll,allCount>0&&allP>=100);
   allBtn.title=`All boards — ${allP}% in Done`;
   allBtn.innerHTML=`<span>All</span> <span class="cnt" style="opacity:.6;font-weight:400">(${allCount})</span>`;
   allBtn.onclick=()=>{ state.activeBoardId='__all'; save(true); render(); };
@@ -166,15 +251,20 @@ function renderTabs(){
     const p = boardProgress(b);
     const btn = document.createElement('div');
     btn.className = 'board-tab' + (b.id===state.activeBoardId?' active':'');
-    btn.style.cssText = tabFill(p, b.id===state.activeBoardId);
+    btn.style.cssText = tabFill(p, b.id===state.activeBoardId, n>0&&p>=100);
     btn.innerHTML = `<span></span> <span class="cnt" style="opacity:.6;font-weight:400">(${n})</span>`;
     btn.firstChild.textContent = b.name;
-    btn.title = `${b.name} — ${p}% in Done (double-click to rename)`;
+    btn.title = `${b.name} — ${p}% in Done (double-click or ✏️ to rename)`;
     btn.onclick = ()=>{ state.activeBoardId=b.id; save(true); render(); };
     btn.ondblclick = ()=>{
       const nn = prompt('Rename board:', b.name);
       if(nn && nn.trim()){ b.name = nn.trim().slice(0,40); save(); render(); }
     };
+    // explicit rename (dblclick alone can't work: first click re-renders tabs, so the 2nd click never completes one)
+    const pen = document.createElement('span');
+    pen.className='rn'; pen.textContent='✏️'; pen.title='Rename board';
+    pen.onclick=(e)=>{ e.stopPropagation(); const nn=prompt('Rename board:',b.name); if(nn&&nn.trim()){ b.name=nn.trim().slice(0,40); save(); render(); } };
+    btn.appendChild(pen);
     if(state.boards.length>1){
       const x = document.createElement('span');
       x.className='x'; x.textContent='×'; x.title='Delete board';
@@ -305,11 +395,15 @@ function cardNode(c, board, colIdx){
   });
   d.querySelector('.card-title').textContent=c.title;
   if(c.details) d.querySelector('.card-details').textContent=c.details;
+  if(selectMode&&selected.has(c.id)) d.classList.add('selected');
   // escape tag chips already safe (tags sanitized lowercase alnum)
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
   d.ondragend=()=>d.classList.remove('dragging');
   d.querySelector('[data-a="edit"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
-  d.onclick=()=>openCardModal(c.id);
+  d.onclick=()=>{
+    if(selectMode){ selected.has(c.id)?selected.delete(c.id):selected.add(c.id); d.classList.toggle('selected',selected.has(c.id)); renderSelBar(); }
+    else openCardModal(c.id);
+  };
   d.querySelector('[data-a="left"]').onclick=(e)=>{e.stopPropagation();moveCard(c,-1);};
   d.querySelector('[data-a="right"]').onclick=(e)=>{e.stopPropagation();moveCard(c,1);};
   d.querySelector('[data-a="done"]').onclick=(e)=>{e.stopPropagation();const cols=board.columns;const last=cols[cols.length-1];c.colId=last.id;save();render();};
@@ -684,7 +778,7 @@ function parseFull(raw){
   // one-step capture: first line = title, rest = details; tokens + meeting intel over everything
   const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const p=parseQuick(lines.join('\n'));
-  const plines=p.title.split('\n').map(s=>s.trim()).filter(Boolean);
+  const plines=p.title.split('\n').map(s=>stripListMarker(s).text.trim()).filter(Boolean);
   const title=pickTitle(plines);
   const ti=plines.indexOf(title);
   const details=(ti>=0?[...plines.slice(0,ti),...plines.slice(ti+1)]:plines).join('\n').slice(0,2000);
@@ -726,7 +820,11 @@ $('quickInput').addEventListener('keydown',(e)=>{
 document.addEventListener('keydown',(e)=>{
   if(e.key==='n'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();$('quickInput').focus();}
   if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();$('searchInput').focus();}
-  if(e.key==='Escape'){document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));}
+  if(e.key==='Escape'){
+    if(selectMode){ setSelectMode(false); return; }
+    document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));
+  }
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); doUndo(); }
 });
 ['searchInput','filterTag','filterPriority','filterDue'].forEach(id=>$(id).addEventListener('input',()=>renderBoard()));
 
@@ -770,8 +868,12 @@ $('mDelete').onclick=()=>{
 $('importBtn').onclick=()=>{
   $('importBoard').innerHTML=state.boards.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
   $('importBoard').value=(state.activeBoardId==='__all'?(state.boards[0]&&state.boards[0].id):state.activeBoardId);
+  $('importSingle').checked=importSingle();
   $('importModal').classList.remove('hidden');
+  refreshImportCount();
 };
+$('importText').addEventListener('input',refreshImportCount);
+$('importSingle').addEventListener('change',()=>{ try{localStorage.setItem(IMPORT_SINGLE_KEY,$('importSingle').checked?'1':'0');}catch{} refreshImportCount(); });
 $('importCancel').onclick=()=>$('importModal').classList.add('hidden');
 $('pasteClipBtn').onclick=async ()=>{
   try{
@@ -782,18 +884,51 @@ $('pasteClipBtn').onclick=async ()=>{
     ta.focus();
   }catch{ alert('Clipboard blocked — allow access or paste manually with ⌘V / long-press.'); }
 };
+// --- toast (non-blocking confirm; Escape-safe, unlike alert) ---
+function toast(msg){
+  let t=$('toast');
+  if(!t){ t=document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2800);
+}
+const IMPORT_SINGLE_KEY='quickboard.importSingle';
+function importSingle(){ try{ return localStorage.getItem(IMPORT_SINGLE_KEY)==='1'; }catch{ return false; } }
+function importLineCount(){ return $('importText').value.split('\n').map(s=>s.trim()).filter(Boolean).length; }
+function refreshImportCount(){
+  const el=$('importCount'); if(!el) return;
+  const n=importLineCount(), single=$('importSingle').checked;
+  el.textContent = !n ? 'paste something first'
+    : single ? 'whole note → 1 card (first line = title, rest = details)'
+    : `${n} line${n>1?'s':''} → ${n} card${n>1?'s':''}`;
+}
 $('importGo').onclick=()=>{
   const boardId=$('importBoard').value; const b=state.boards.find(x=>x.id===boardId); if(!b)return;
+  const inbox=b.columns[0].id, doneCol=b.columns[b.columns.length-1].id;
+  const single=$('importSingle').checked;
+  if(single){
+    const raw=$('importText').value.trim();
+    if(!raw){ toast('Paste some lines first'); return; }
+    const p=parseFull(raw);
+    if(!p.title){ toast('Could not find a title line'); return; }
+    if(!confirm(`Import 1 card "${p.title.slice(0,60)}" to ${b.name} → ${b.columns[0].name}?`)) return; // Escape cancels BEFORE anything is created
+    state.cards.unshift({id:uid(),boardId,colId:inbox,title:p.title.slice(0,200),details:p.details,tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
+    $('importText').value=''; $('importModal').classList.add('hidden');
+    state.activeBoardId=boardId; save(); render();
+    toast(`Imported 1 card to ${b.name} ✓`);
+    return;
+  }
   const lines=$('importText').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  if(!lines.length){alert('Paste some lines first');return;}
-  const inbox=b.columns[0].id;
+  if(!lines.length){ toast('Paste some lines first'); return; }
+  if(!confirm(`Import ${lines.length} card${lines.length>1?'s':''} to ${b.name} → ${b.columns[0].name}?`)) return; // Escape cancels BEFORE anything is created
   lines.forEach(line=>{
-    const p=parseQuick(line);
-    state.cards.unshift({id:uid(),boardId,colId:inbox,title:p.title.slice(0,200),details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
+    const mk=stripListMarker(line);
+    const p=parseQuick(mk.text);
+    // checked "- [x]" items land straight in Done
+    state.cards.unshift({id:uid(),boardId,colId:mk.checked?doneCol:inbox,title:p.title.slice(0,200),details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
   });
   $('importText').value=''; $('importModal').classList.add('hidden');
   state.activeBoardId=boardId; save(); render();
-  alert(`Imported ${lines.length} cards to ${b.name} → ${b.columns[0].name}`);
+  toast(`Imported ${lines.length} cards to ${b.name} ✓`);
 };
 $('importFile').addEventListener('change',(e)=>{
   const f=e.target.files[0]; if(!f)return;
@@ -870,7 +1005,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v44';
+const APP_VER = 'v46';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

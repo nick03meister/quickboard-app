@@ -39,6 +39,17 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .board-tab{white-space:nowrap;border:1px solid var(--line);background:#f8fafc;border-radius:999px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:14px}
 .board-tab.active{background:var(--united);color:#fff;border-color:#8f1008}
 .board-tab .x{margin-left:8px;opacity:.6}
+.board-tab .rn{margin-left:6px;opacity:.55;font-size:13px}
+.board-tab .rn:hover{opacity:1}
+.search-meta{font-size:12px;color:#fff;opacity:.85;white-space:nowrap}
+.search-meta.link{text-decoration:underline;cursor:pointer;opacity:1}
+#undoBtn:disabled{opacity:.35;cursor:default}
+.top-actions #selectBtn.on{background:#fff;color:#b81d12}
+.card.selected{outline:3px solid var(--united);outline-offset:-1px;background:#fff7ed}
+.sel-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;display:flex;gap:8px;align-items:center;background:rgba(20,3,3,.94);color:#fff;border:1px solid rgba(255,184,28,.55);border-radius:999px;padding:8px 8px 8px 18px;font-size:13px;font-weight:700;box-shadow:0 12px 32px rgba(0,0,0,.45);max-width:94vw;flex-wrap:wrap;justify-content:center}
+.sel-bar .mini:disabled{opacity:.4}
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(16px);bottom:calc(20px + env(safe-area-inset-bottom));background:#0f172a;color:#fff;padding:11px 20px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;transition:opacity .25s ease,transform .25s ease;z-index:100;box-shadow:0 8px 28px rgba(0,0,0,.35);pointer-events:none;max-width:92vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .quickadd{background:#fff;border-bottom:1px solid var(--line);padding:10px 14px;position:relative}
 .qa-suggest{position:absolute;top:100%;left:14px;right:14px;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(28,10,10,.16);z-index:30;overflow:hidden}
 .qa-sug{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;border:none;background:transparent;padding:10px 14px;cursor:pointer;font-size:14px;color:#1c0a0a}
