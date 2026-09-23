@@ -9,12 +9,12 @@
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icon-192.png" />
 <link rel="apple-touch-icon" href="./icon-180.png" />
-<link rel="stylesheet" href="./styles.css?v=42" />
+<link rel="stylesheet" href="./styles.css?v=43" />
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo"><img src="./manutd-crest.webp?v=42" alt="Manchester United" /></div>
+    <div class="logo"><img src="./manutd-crest.webp?v=43" alt="Manchester United" /></div>
     <div>
       <div class="brand-title">QuickBoard</div>
       <div class="brand-sub">daily capture • kanban</div>
@@ -55,7 +55,7 @@
 
 <section class="quickadd" id="quickadd">
   <div class="qa-row main">
-    <input id="quickInput" type="text" placeholder="Quick add → e.g. Call bank @Daily Tasks #errand due:tomorrow !high" autocomplete="off" />
+    <textarea id="quickInput" rows="1" placeholder="Quick add → type or paste anything — first line = title, rest = details. e.g. MOE demo @Meetings #errand due:tomorrow !high" autocomplete="off"></textarea>
     <button id="voiceBtn" class="btn voice" title="Voice input (speech to text)">🎤</button>
     <div class="seg" id="voiceLang" title="Voice input language">
       <button data-l="en-US" class="on">EN</button><button data-l="hi-IN">हिंदी</button>
@@ -77,11 +77,11 @@
     <span id="smartTags" class="smart-tags"></span>
   </div>
   <div class="qa-templates" id="qaTemplates"></div>
-  <div class="qa-hint"><span class="qa-lead">💡 Tip:</span><span class="qa-ex">use <code>#tag</code> for tags,</span><span class="qa-ex"><code>!high / !med / !low</code> for priority,</span><span class="qa-ex"><code>@board</code> to route <code>@Quick Notes</code>,</span><span class="qa-ex"><code>due:today / tomorrow / 25-09-2026</code> for dates.</span><span class="qa-ex"><span class="kbd">N</span> jumps to quick-add, <span class="kbd">Enter</span> adds to Inbox.</span></div>
+  <div class="qa-hint"><span class="qa-lead">💡 Tip:</span><span class="qa-ex">use <code>#tag</code> for tags,</span><span class="qa-ex"><code>!high / !med / !low</code> for priority,</span><span class="qa-ex"><code>@board</code> to route <code>@Quick Notes</code>,</span><span class="qa-ex"><code>due:today / tomorrow / 25-09-2026</code> for dates.</span><span class="qa-ex"><span class="kbd">N</span> jumps to quick-add, <span class="kbd">Enter</span> adds, <span class="kbd">Shift+Enter</span> new line.</span><span class="qa-ex">Paste invite = title + details + date auto-filled.</span></div>
 </section>
 
 <section id="unitedBar" class="united-bar">
-  <div class="united-badge"><img src="./manutd-crest.webp?v=42" alt="MUFC" /></div>
+  <div class="united-badge"><img src="./manutd-crest.webp?v=43" alt="MUFC" /></div>
   <div class="united-next" id="unitedNext">Loading United fixtures…</div>
   <div class="united-count" id="unitedCount"></div>
   <div class="united-list" id="unitedList"></div>
@@ -93,7 +93,7 @@
 <footer class="footer">
   <span id="statsLine">—</span>
   <span class="dot">•</span>
-  <span id="verLine">v42 • checking sync…</span>
+  <span id="verLine">v43 • checking sync…</span>
   <span class="dot">•</span>
   <span>Add to Home Screen on Samsung for app mode</span>
 </footer>
@@ -211,8 +211,8 @@
   <button id="voiceCancel" class="mini del" title="Discard recording">✕</button>
 </div>
 
-<script src="./firebase-config.js?v=42"></script>
-<script src="./app.js?v=42"></script>
+<script src="./firebase-config.js?v=43"></script>
+<script src="./app.js?v=43"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

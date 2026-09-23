@@ -62,6 +62,7 @@ function save(localOnly){
   if(!localOnly) pushToCloud();
 }
 const sanitizeTag = (s)=>s.toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20);
+const tidy = (t)=> t.split('\n').map(s=>s.replace(/[ \t]{2,}/g,' ').trim()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
 
 // --- quick parse ---
 function parseQuick(text){
@@ -117,10 +118,10 @@ function parseQuick(text){
       boardId = hit.id;
       const named = sorted.find(b=>b.id===hit.id && rest.toLowerCase().startsWith(b.name.toLowerCase())) ? hit.name.length
         : hit.name.split(' ')[0].length;
-      text = (text.slice(0,atIdx)+' '+text.slice(atIdx+1+named)).replace(/\s{2,}/g,' ').trim();
+      text = tidy(text.slice(0,atIdx)+' '+text.slice(atIdx+1+named));
     }
   }
-  text = text.replace(/\s{2,}/g,' ').trim();
+  text = tidy(text);
   return {title:text, tags:[...new Set(tags)], priority, due, boardId};
 }
 
@@ -671,14 +672,32 @@ function finishVoice(cancelled){
   // stop() flushes pending finals ~instantly; wait a beat so newest words aren't lost
   voiceCommitT=setTimeout(()=>commitVoice(cancelled), cancelled?0:800);
 }
+function parseFull(raw){
+  // one-step capture: first line = title, rest = details; tokens + meeting intel over everything
+  const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  const p=parseQuick(lines.join('\n'));
+  const plines=p.title.split('\n').map(s=>s.trim()).filter(Boolean);
+  const title=(plines[0]||'').slice(0,200);
+  const details=plines.slice(1).join('\n').slice(0,2000);
+  const intel=detectMeeting(p.title);
+  let {tags, priority, due, boardId} = p;
+  if(intel.due && !due) due=intel.due;
+  if(intel.hasTime && (priority===''||priority==='med')) priority='high';
+  if(intel.isMeeting){
+    if(!boardId){ const mb=state.boards.find(b=>/meeting/i.test(b.name)); if(mb) boardId=mb.id; }
+    if(!tags.includes('meetings')) tags=[...tags,'meetings'];
+    addPreset('meetings');
+  }
+  return {title, details, tags, priority, due, boardId, isMeeting:intel.isMeeting};
+}
 function doQuickAdd(){
   const inp=$('quickInput'); const v=inp.value.trim(); if(!v)return;
-  const p=parseQuick(v);
+  const p=parseFull(v);
   if(!p.title){alert('Type a title');return;}
   const b=(p.boardId && state.boards.find(x=>x.id===p.boardId)) || activeBoard();
   const firstCol=b.columns[0].id;
-  state.cards.unshift({id:uid(),boardId:b.id,colId:firstCol,title:p.title,details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
-  inp.value=''; $('quickDue').value='';
+  state.cards.unshift({id:uid(),boardId:b.id,colId:firstCol,title:p.title,details:p.details,tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
+  inp.value=''; inp.style.height='auto'; $('quickDue').value='';
   rememberSmart(b.id, p.tags, p.priority);
   refreshQaMeta();
   qaSugEl.classList.add('hidden');
@@ -686,9 +705,12 @@ function doQuickAdd(){
   save(); render(); inp.focus();
 }
 $('quickAddBtn').onclick=doQuickAdd;
+function autogrowQa(){ const inp=$('quickInput'); inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,132)+'px'; }
+$('quickInput').addEventListener('input',()=>{ autogrowQa(); });
 $('quickInput').addEventListener('keydown',(e)=>{
-  if(e.key!=='Enter') return;
-  if(listening){ e.preventDefault(); return; } // mic-tap only stops recording; Enter never interrupts speech
+  if(e.key!=='Enter'||e.shiftKey) return; // Shift+Enter = newline
+  e.preventDefault();
+  if(listening){ return; } // mic-tap only stops recording; Enter never interrupts speech
   if(voiceCommitT){ clearTimeout(voiceCommitT); voiceCommitT=null; commitVoice(false); } // flush pending dictation first
   doQuickAdd();
 });
@@ -839,7 +861,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v42';
+const APP_VER = 'v43';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

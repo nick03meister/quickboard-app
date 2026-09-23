@@ -45,8 +45,8 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .qa-sug.sel,.qa-sug:hover{background:rgba(218,41,28,.09)}
 .qa-sug span{font-size:12px;color:#8a6d6d}
 .qa-row{display:flex;gap:8px}
-.qa-row.main input[type="text"]{flex:1;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-size:15px;box-shadow:0 1px 3px rgba(28,10,10,.06)}
-.qa-row.main input[type="text"]:focus{border-color:var(--united);outline:none;box-shadow:0 0 0 3px rgba(218,41,28,.12)}
+.qa-row.main textarea{flex:1;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-size:15px;font-family:inherit;box-shadow:0 1px 3px rgba(28,10,10,.06);resize:none;overflow-y:auto;max-height:132px;line-height:1.4}
+.qa-row.main textarea:focus{border-color:var(--united);outline:none;box-shadow:0 0 0 3px rgba(218,41,28,.12)}
 .btn.voice{border-radius:12px;background:#fff}
 .btn.voice{position:relative;overflow:visible}
 .seg{display:flex;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:2px;gap:2px}
@@ -78,7 +78,6 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .qa-templates::-webkit-scrollbar{display:none}
 .qa-tpl{flex:0 0 auto;font-size:12px;background:#f8fafc;border:1px solid var(--line);border-radius:999px;padding:4px 12px;cursor:pointer;color:#57534e}
 .qa-tpl:hover{border-color:var(--united);color:#b81d12}
-.qa-row input[type="text"]{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px}
 .qa-row input[type="date"],.qa-row select{border-color:var(--line);background:#f8fafc;color:#0f172a}
 .qa-hint{display:flex;align-items:center;gap:7px 10px;flex-wrap:wrap;font-size:12.5px;line-height:2;color:#8a6d6d;margin-top:10px;background:linear-gradient(180deg,rgba(218,41,28,.06),rgba(218,41,28,.03));border:1px solid rgba(218,41,28,.14);border-radius:12px;padding:8px 14px}
 .qa-hint code{background:#fff;border:1px solid rgba(218,41,28,.22);color:#b81d12;border-radius:8px;padding:1px 8px;font-size:11.5px;font-weight:600;box-shadow:0 1px 2px rgba(28,10,10,.06);white-space:nowrap}
@@ -150,7 +149,7 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
   .col{min-width:82vw;max-width:82vw;width:82vw;max-height:none}
   .search{min-width:140px;flex:1}
   .qa-row{flex-wrap:wrap}
-  .qa-row input[type="text"]{flex-basis:100%}
+  .qa-row textarea{flex-basis:100%}
   .qa-hint{font-size:12px;padding:7px 10px;gap:6px;margin-top:8px}
   .grid2{grid-template-columns:1fr}
   /* @board suggestions open ABOVE the input so the keyboard never covers them */
