@@ -476,7 +476,7 @@ function cardNode(c, board, colIdx){
   const inAll = state.activeBoardId==='__all';
   d.innerHTML=`<div class="card-title"></div>${c.details?'<div class="card-details"></div>':''}
     <div class="chips">${inAll?`<span class="chip board-chip"></span>`:''}${c.tags.map(t=>`<span class="chip tag-chip" data-tag="${t}" title="Filter by #${t}">#${t}</span>`).join('')}${pri}${dueChip(c)}</div>
-    <div class="card-foot"><button class="mini" data-a="edit">Edit</button><button class="mini" data-a="left" title="Move card left">←</button><button class="mini" data-a="right" title="Move card right">→</button><button class="mini${isDone?' done-on':''}" data-a="done" title="${isDone?'Done ✓':'Send card to Done'}">✓</button><button class="mini del" data-a="delcard" title="Delete this card">🗑️</button></div>`;
+    <div class="card-foot"><button class="mini" data-a="edit">Edit</button><button class="mini" data-a="left" title="Move card left">←</button><button class="mini" data-a="right" title="Move card right">→</button><button class="mini${isDone?' done-on':''}" data-a="done" title="${isDone?'Done ✓':'Send card to Done'}">✓</button><button class="mini del" data-a="delcard" title="Delete this card">🗑️</button><button class="mini" data-a="more" title="Open details">•••</button></div>`;
   if(inAll) d.querySelector('.board-chip').textContent='📋 '+board.name;
   d.querySelectorAll('.tag-chip').forEach(el=>{
     if($('filterTag').value===el.dataset.tag) el.classList.add('on');
@@ -489,6 +489,7 @@ function cardNode(c, board, colIdx){
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
   d.ondragend=()=>d.classList.remove('dragging');
   d.querySelector('[data-a="edit"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
+  d.querySelector('[data-a="more"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
   // press gestures: tap = open/toggle, 550ms hold = select, hold+move = drag.
   // mouse keeps native HTML5 DnD; touch uses the custom ghost below.
   // (one unified block: separate long-press/drag handlers fought over the same gesture)
@@ -1240,7 +1241,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v61';
+const APP_VER = 'v62';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1278,20 +1279,25 @@ function applyRemote(data){
   if(localStorage.getItem(LS_KEY)===JSON.stringify(remote)) { lastSyncAt=Date.now(); stampSyncLine(); return true; }
   if((data.updatedAt||0) > (state._ts||0)){
     const remoteBoards=(remote.boards||[]).length, localBoards=(state.boards||[]).length;
-    // Destructive direction guard: cloud with FEWER boards never auto-wipes local ones.
-    // (A fresh/stale device pushing defaults used to nuke renamed boards everywhere.)
+    const remoteCards=((remote.cards)||[]).length, localCards=(state.cards||[]).length;
+    // Destructive direction guard: cloud with FEWER boards or FEWER cards never auto-wipes
+    // local data (a fresh/stale device pushing defaults used to nuke renamed boards everywhere).
     // Convergence then needs a manual, type-confirmed Force-pull. Card edits still flow.
-    if(remoteBoards < localBoards){
-      console.warn(`sync: held — cloud has ${remoteBoards} boards, local has ${localBoards}; keeping local`);
+    if(remoteBoards < localBoards || remoteCards < localCards){
+      console.warn(`sync: held — cloud has ${remoteBoards} boards/${remoteCards} cards, local has ${localBoards}/${localCards}; keeping local`);
       const now=Date.now();
       if(!applyRemote._heldAt || now-applyRemote._heldAt>10*60*1000){
         applyRemote._heldAt=now;
-        toast('Sync held: cloud is missing boards — kept yours. Use Force-pull to converge.');
+        toast('Sync held: cloud is missing data — kept yours. Use Force-pull to converge.');
       }
       lastSyncAt=Date.now(); stampSyncLine();
       return false;
     }
-    takeSnapshot('pre-sync'); // any cloud replace stays restorable from backups
+    try{
+      const prev=localStorage.getItem(LS_KEY);
+      if(prev){ undoStack.push(prev); if(undoStack.length>15) undoStack.shift(); refreshUndoBtn(); }
+    }catch{}
+    takeSnapshot('pre-sync'); // any cloud replace stays restorable from backups AND one-tap undo
     const keepBoard = state.activeBoardId;
     state=remote; state.activeBoardId=state.activeBoardId||keepBoard||state.boards[0]?.id;
     healState();
