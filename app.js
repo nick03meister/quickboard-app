@@ -205,6 +205,7 @@ function render(){
 function refreshSearchMeta(){
   const el=$('searchMeta'); if(!el) return;
   const f=currentFilters();
+  const cf=$('clearFilters'); if(cf) cf.classList.toggle('hidden',!(f.q||f.tag||f.pri||f.due));
   if(!f.q&&!f.tag&&!f.pri&&!f.due){ el.textContent=''; el.onclick=null; el.classList.remove('link'); return; }
   const match=(c)=>cardMatches(c,f);
   if(state.activeBoardId==='__all'){
@@ -218,7 +219,6 @@ function refreshSearchMeta(){
     el.onclick = away?()=>{ state.activeBoardId='__all'; save(true); render(); }:null;
     el.classList.toggle('link',!!away);
   }
-  const cf=$('clearFilters'); if(cf) cf.classList.toggle('hidden',!(f.q||f.tag||f.pri||f.due));
 }
 // logo = home: All boards, filters cleared, selection dropped
 document.querySelector('.brand').onclick=()=>{
@@ -446,14 +446,51 @@ function cardNode(c, board, colIdx){
   d.ondragend=()=>d.classList.remove('dragging');
   d.querySelector('[data-a="edit"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
   // long-press (550ms, touch or mouse) enters select mode — the mobile-native pattern
-  let pressT=null;
-  const startPress=()=>{ if(selectMode||pressT) return; pressT=setTimeout(()=>{ pressT=null; setSelectMode(true); selected.add(c.id); renderSelBar(); render(); },550); };
-  const cancelPress=()=>{ if(pressT){ clearTimeout(pressT); pressT=null; } };
+  // (tolerates ~10px finger jitter; bigger moves cancel it and may start a drag instead)
+  let pressT=null, pressPos=null;
+  const startPress=(e)=>{ if(selectMode||pressT) return; pressPos={x:e.clientX,y:e.clientY}; pressT=setTimeout(()=>{ pressT=null; pressPos=null; setSelectMode(true); selected.add(c.id); renderSelBar(); render(); },550); };
+  const cancelPress=()=>{ if(pressT){ clearTimeout(pressT); pressT=null; pressPos=null; } };
   d.addEventListener('pointerdown',startPress);
   d.addEventListener('pointerup',cancelPress);
-  d.addEventListener('pointermove',cancelPress);
+  d.addEventListener('pointermove',(e)=>{ if(pressT&&pressPos&&Math.hypot(e.clientX-pressPos.x,e.clientY-pressPos.y)>10) cancelPress(); });
   d.addEventListener('pointercancel',cancelPress);
   d.addEventListener('contextmenu',(e)=>{ if(selectMode||pressT) e.preventDefault(); });
+  // touch drag-and-drop (HTML5 DnD is mouse-only): hold + move lifts a ghost, drop on a column
+  let tdrag=null;
+  d.addEventListener('pointerdown',(e)=>{
+    if(e.pointerType==='mouse'||selectMode) return;
+    const sx=e.clientX, sy=e.clientY;
+    const move=(ev)=>{
+      if(!tdrag){
+        if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<12) return;
+        cancelPress();
+        tdrag={id:c.id,ghost:d.cloneNode(true)};
+        const r=d.getBoundingClientRect();
+        Object.assign(tdrag.ghost.style,{position:'fixed',left:r.left+'px',top:r.top+'px',width:r.width+'px',opacity:'.92',pointerEvents:'none',zIndex:200});
+        d.style.touchAction='none';
+        document.body.appendChild(tdrag.ghost);
+      }
+      tdrag.ghost.style.left=(ev.clientX-tdrag.ghost.offsetWidth/2)+'px';
+      tdrag.ghost.style.top=(ev.clientY-44)+'px';
+      document.querySelectorAll('.col.drag-over').forEach(x=>x.classList.remove('drag-over'));
+      const el=document.elementFromPoint(ev.clientX,ev.clientY);
+      const col=el&&el.closest?el.closest('.col'):null;
+      if(col) col.classList.add('drag-over');
+    };
+    const up=(ev)=>{
+      d.removeEventListener('pointermove',move); d.removeEventListener('pointerup',up); d.removeEventListener('pointercancel',up);
+      d.style.touchAction='';
+      if(!tdrag) return;
+      const g=tdrag; tdrag=null; g.ghost.remove();
+      document.querySelectorAll('.col.drag-over').forEach(x=>x.classList.remove('drag-over'));
+      const el=document.elementFromPoint(ev.clientX,ev.clientY);
+      const col=el&&el.closest?el.closest('.col'):null;
+      if(col) dropCardOnCol(g.id,col);
+    };
+    d.addEventListener('pointermove',move);
+    d.addEventListener('pointerup',up);
+    d.addEventListener('pointercancel',up);
+  });
   d.onclick=()=>{
     if(selectMode){ selected.has(c.id)?selected.delete(c.id):selected.add(c.id); d.classList.toggle('selected',selected.has(c.id)); renderSelBar(); }
     else openCardModal(c.id);
@@ -469,6 +506,19 @@ function moveCard(c, dir){
   const i=b.columns.findIndex(x=>x.id===c.colId);
   const j=i+dir; if(j<0||j>=b.columns.length)return;
   c.colId=b.columns[j].id; save(); render();
+}
+function dropCardOnCol(id,colEl){
+  const card=state.cards.find(x=>x.id===id); if(!card||!colEl) return;
+  if(colEl.dataset.colId){
+    const b=state.boards.find(x=>x.id===card.boardId);
+    const col=b?.columns.find(x=>x.id===colEl.dataset.colId); if(!col) return;
+    if(card.colId===col.id){ render(); return; }
+    card.colId=col.id;
+  }else if(colEl.dataset.colName){
+    const rc=realColFor(card.boardId,colEl.dataset.colName); if(!rc||card.colId===rc.id){ render(); return; }
+    card.colId=rc.id;
+  }else return;
+  save(); render();
 }
 function renderTagFilter(){
   const sel=$('filterTag'); const cur=sel.value;
@@ -1138,7 +1188,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v53';
+const APP_VER = 'v54';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
