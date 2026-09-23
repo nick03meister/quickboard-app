@@ -313,6 +313,27 @@ function renderTabs(){
     pen.className='rn'; pen.textContent='✏️'; pen.title='Rename board';
     pen.onclick=(e)=>{ e.stopPropagation(); const nn=prompt('Rename board:',b.name); if(nn&&nn.trim()){ b.name=nn.trim().slice(0,40); save(); render(); } };
     btn.appendChild(pen);
+    // steppers on the active tab: reorder boards (touch-friendly)
+    if(b.id===state.activeBoardId&&state.boards.length>1){
+      const idx=state.boards.findIndex(z=>z.id===b.id);
+      const mk=(t,dir)=>{ const s=document.createElement('span'); s.className='rn'; s.textContent=t; s.title=t==='‹'?'Move board left':'Move board right';
+        s.onclick=(e)=>{ e.stopPropagation(); const j=idx+dir; if(j<0||j>=state.boards.length) return;
+          const arr=state.boards; const [mv]=arr.splice(idx,1); arr.splice(j,0,mv); save(); render(); }; return s; };
+      if(idx>0) btn.insertBefore(mk('‹',-1),btn.firstChild);
+      btn.appendChild(mk('›',1));
+    }
+    // desktop drag-to-reorder tabs
+    btn.draggable=true;
+    btn.ondragstart=(e)=>{ e.dataTransfer.setData('text/board-id',b.id); };
+    btn.ondragover=(e)=>{ e.preventDefault(); btn.classList.add('drag-over'); };
+    btn.ondragleave=()=>btn.classList.remove('drag-over');
+    btn.ondrop=(e)=>{
+      e.preventDefault(); e.stopPropagation(); btn.classList.remove('drag-over');
+      const id=e.dataTransfer.getData('text/board-id'); if(!id||id===b.id) return;
+      const arr=state.boards, from=arr.findIndex(z=>z.id===id), to=arr.findIndex(z=>z.id===b.id);
+      if(from<0||to<0) return;
+      const [mv]=arr.splice(from,1); arr.splice(to,0,mv); save(); render();
+    };
     if(state.boards.length>1){
       const x = document.createElement('span');
       x.className='x'; x.textContent='×'; x.title='Delete board';
@@ -1210,7 +1231,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v56';
+const APP_VER = 'v58';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
