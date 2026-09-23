@@ -1,4 +1,11 @@
 /* QuickBoard — local-first multi-board Kanban */
+/* first-line crash reporter: if boot dies, the footer says why instead of a blank page */
+window.addEventListener('error',function(e){
+  try{
+    var el=document.getElementById('statsLine');
+    if(el) el.textContent='Startup error: '+((e&&e.message)||'script load failed');
+  }catch(_){}
+});
 const LS_KEY = 'quickboard.v1';
 const FB_CFG_KEY = 'quickboard.firebase';
 const SYNC_KEY = 'quickboard.synckey';
@@ -1005,7 +1012,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v46';
+const APP_VER = 'v47';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1191,13 +1198,19 @@ function createMatchdayCard(x){
 }
 
 /* ——— boot ——— */
-render();
-stampSyncLine();
-initCloud();
-loadUnited();
-(function dailySnap(){
+try{
+  render();
+  stampSyncLine();
+  initCloud();
+  loadUnited();
+  dailySnap();
+}catch(err){
+  try{ document.getElementById('statsLine').textContent='Startup failed: '+((err&&err.message)||err); }catch(_){}
+  console.error(err);
+}
+function dailySnap(){
   const snaps=getSnaps();
   const today=todayStr();
   const hasToday=snaps.some(s=>new Date(s.ts).toISOString().slice(0,10)===today);
   if(!hasToday) takeSnapshot('auto-daily');
-})();
+}
