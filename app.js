@@ -110,6 +110,23 @@ function stripListMarker(line){
   t=t.replace(/^\s*\[[ xX]\]\s*/,'');
   return {text:t, checked};
 }
+// one-time cleanup: strip "- [ ]" markers off titles imported before stripping existed (undoable)
+(function cleanMarkersOnce(){
+  try{
+    if(localStorage.getItem('qb.markers.cleaned')==='1') return;
+    let n=0;
+    state.cards.forEach(c=>{
+      const t=stripListMarker(c.title||'').text.trim();
+      if(t&&t!==c.title){ c.title=t.slice(0,200); n++; }
+      if(c.details){
+        const d2=c.details.split('\n').map(l=>stripListMarker(l).text.trim()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
+        if(d2!==c.details){ c.details=d2; n++; }
+      }
+    });
+    localStorage.setItem('qb.markers.cleaned','1');
+    if(n){ save(); render(); toast(`Cleaned ${n} card${n>1?'s':''} ✓ — Undo available`); }
+  }catch{}
+})();
 
 // --- quick parse ---
 function parseQuick(text){
@@ -318,8 +335,9 @@ function renderAllBoard(){
       const rc=realColFor(c.boardId,name); if(!rc||c.colId!==rc.id) return false;
       return cardMatches(c,f);
     }).sort((a,c2)=>(a.due||'9999')<(c2.due||'9999')?-1:1);
-    colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span></div><div class="cards"></div><button class="add-inline">+ Add card</button>`;
+    colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span><span class="col-actions"><button class="mini" data-act="sel" title="Select multiple cards">Select</button></span></div><div class="cards"></div><button class="add-inline">+ Add card</button>`;
     colDiv.querySelector('.col-name').textContent=name;
+    colDiv.querySelector('[data-act="sel"]').onclick=()=>setSelectMode(true);
     colDiv.querySelector('.add-inline').onclick=()=>{
       const t=prompt(`New card in column "${name}" (use @Board to route, else ${state.boards[0]?.name}):`); if(!t||!t.trim())return;
       const p=parseQuick(t.trim());
@@ -356,9 +374,10 @@ function renderBoard(){
     const cards = state.cards.filter(c=>c.boardId===b.id && c.colId===col.id && cardMatches(c,f))
       .sort((a,c2)=>(a.due||'9999')<(c2.due||'9999')?-1:1);
     colDiv.innerHTML = `<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span>
-      <span class="col-actions"><button class="mini" data-act="rename" title="Rename this column">✏️</button><button class="mini del" data-act="del" title="Delete this entire COLUMN (cards move to first column)">Column 🗑️</button></span></div>
+      <span class="col-actions"><button class="mini" data-act="sel" title="Select multiple cards">Select</button><button class="mini" data-act="rename" title="Rename this column">✏️</button><button class="mini del" data-act="del" title="Delete this entire COLUMN (cards move to first column)">Column 🗑️</button></span></div>
       <div class="cards"></div><button class="add-inline">+ Add card</button>`;
     colDiv.querySelector('.col-name').textContent = col.name;
+    colDiv.querySelector('[data-act="sel"]').onclick=()=>setSelectMode(true);
     colDiv.querySelector('[data-act="rename"]').onclick=()=>{
       const nn=prompt('Rename column:',col.name); if(nn&&nn.trim()){col.name=nn.trim().slice(0,30);save();render();}
     };
@@ -419,6 +438,15 @@ function cardNode(c, board, colIdx){
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
   d.ondragend=()=>d.classList.remove('dragging');
   d.querySelector('[data-a="edit"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
+  // long-press (550ms, touch or mouse) enters select mode — the mobile-native pattern
+  let pressT=null;
+  const startPress=()=>{ if(selectMode||pressT) return; pressT=setTimeout(()=>{ pressT=null; setSelectMode(true); selected.add(c.id); renderSelBar(); render(); },550); };
+  const cancelPress=()=>{ if(pressT){ clearTimeout(pressT); pressT=null; } };
+  d.addEventListener('pointerdown',startPress);
+  d.addEventListener('pointerup',cancelPress);
+  d.addEventListener('pointermove',cancelPress);
+  d.addEventListener('pointercancel',cancelPress);
+  d.addEventListener('contextmenu',(e)=>{ if(selectMode||pressT) e.preventDefault(); });
   d.onclick=()=>{
     if(selectMode){ selected.has(c.id)?selected.delete(c.id):selected.add(c.id); d.classList.toggle('selected',selected.has(c.id)); renderSelBar(); }
     else openCardModal(c.id);
@@ -1103,7 +1131,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v51';
+const APP_VER = 'v52';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

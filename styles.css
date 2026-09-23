@@ -36,7 +36,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .hidden{display:none!important}
 .boardbar{display:flex;gap:8px;align-items:center;padding:8px 14px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:60px;z-index:10;overflow-x:auto}
 .board-tabs{display:flex;gap:8px;overflow-x:auto}
-.board-tab{white-space:nowrap;border:1px solid var(--line);background:#f8fafc;border-radius:999px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:14px;transition:background .2s ease,color .2s ease,border-color .2s ease}
+.board-tab{white-space:nowrap;border:1px solid var(--line);background:#f8fafc;border-radius:999px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:14px;transition:color .15s ease,border-color .15s ease}
 .board-tab.active{background:var(--united);color:#fff;border-color:#8f1008}
 .board-tab .x{margin-left:8px;opacity:.6}
 .board-tab .rn{margin-left:6px;opacity:.55;font-size:13px}
@@ -46,7 +46,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 #undoBtn:disabled{opacity:.35;cursor:default}
 .top-actions #selectBtn.on{background:#fff;color:#b81d12}
 .card.selected{outline:3px solid var(--united);outline-offset:-1px;background:#fff7ed}
-.sel-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;display:flex;gap:8px;align-items:center;background:rgba(20,3,3,.94);color:#fff;border:1px solid rgba(255,184,28,.55);border-radius:999px;padding:8px 8px 8px 18px;font-size:13px;font-weight:700;box-shadow:0 12px 32px rgba(0,0,0,.45);max-width:94vw;flex-wrap:wrap;justify-content:center;animation:slideUp .22s ease}
+.sel-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;display:flex;gap:8px;align-items:center;background:rgba(20,3,3,.94);color:#fff;border:1px solid rgba(255,184,28,.55);border-radius:999px;padding:8px 8px 8px 18px;font-size:13px;font-weight:700;box-shadow:0 12px 32px rgba(0,0,0,.45);max-width:94vw;flex-wrap:wrap;justify-content:center;animation:slideUp .22s cubic-bezier(.16,1,.3,1);will-change:transform,opacity}
 @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .sel-bar .mini:disabled{opacity:.4}
 .toast{position:fixed;left:50%;transform:translateX(-50%) translateY(16px);bottom:calc(20px + env(safe-area-inset-bottom));background:#0f172a;color:#fff;padding:11px 20px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;transition:opacity .25s ease,transform .25s ease;z-index:100;box-shadow:0 8px 28px rgba(0,0,0,.35);pointer-events:none;max-width:92vw;text-align:center}
@@ -107,7 +107,7 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .icon-btn{border:none;background:transparent;cursor:pointer;font-size:14px;opacity:.6}
 .icon-btn:hover{opacity:1}
 .cards{padding:0 10px 10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
-.card{background:rgba(255,255,255,.92);border:1px solid rgba(28,10,10,.07);border-radius:14px;padding:12px;box-shadow:0 1px 3px rgba(28,10,10,.08),0 4px 12px rgba(28,10,10,.05);cursor:grab;transition:box-shadow .15s ease,transform .1s ease}
+.card{background:rgba(255,255,255,.92);border:1px solid rgba(28,10,10,.07);border-radius:14px;padding:12px;box-shadow:0 1px 3px rgba(28,10,10,.08),0 4px 12px rgba(28,10,10,.05);cursor:grab;transition:box-shadow .15s ease,transform .1s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .card:hover{box-shadow:0 2px 6px rgba(28,10,10,.1),0 8px 20px rgba(28,10,10,.08)}
 .card:active{cursor:grabbing}
 .card.dragging{opacity:.5;border-style:dashed}
@@ -134,10 +134,10 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .add-inline{margin:0 10px 10px;border:1px dashed #cbd5e1;background:transparent;border-radius:10px;padding:8px;color:#64748b;cursor:pointer}
 .footer{padding:10px 14px;font-size:12px;color:#64748b;display:flex;gap:8px;align-items:center;background:#fff;border-top:1px solid var(--line)}
 .dot{opacity:.5}
-.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:grid;place-items:center;padding:16px;z-index:50;animation:fadeIn .18s ease}
-.modal-card{background:#fff;border-radius:16px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto;animation:popIn .24s cubic-bezier(.2,.9,.3,1.15)}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:grid;place-items:center;padding:16px;z-index:50;animation:fadeIn .16s ease-out}
+.modal-card{background:#fff;border-radius:16px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto;animation:popIn .24s cubic-bezier(.16,1,.3,1);will-change:transform,opacity}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes popIn{from{opacity:0;transform:scale(.96) translateY(10px)}to{opacity:1;transform:none}}
+@keyframes popIn{from{opacity:0;transform:scale(.97) translateY(10px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.modal,.modal-card,.united-bar.open,.sel-bar,.toast{animation:none!important;transition:none!important}}
 .modal-card.wide{max-width:680px}
 .danger-card{border:3px solid #b91c1c;box-shadow:0 0 0 6px rgba(185,28,28,.15),0 24px 64px rgba(185,28,28,.3)}
@@ -185,7 +185,7 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .utd-dot{position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#ef4444;border:2px solid #fff}
 /* united bar is now a crest-triggered popup, not a full-width strip */
 .united-bar{display:none}
-.united-bar.open{display:flex;position:fixed;top:64px;right:12px;z-index:80;max-width:min(92vw,380px);flex-direction:column;align-items:stretch;gap:10px;border-radius:18px;padding:14px 16px;animation:slideDown .22s ease}
+.united-bar.open{display:flex;position:fixed;top:64px;right:12px;z-index:80;max-width:min(92vw,380px);flex-direction:column;align-items:stretch;gap:10px;border-radius:18px;padding:14px 16px;animation:slideDown .22s cubic-bezier(.16,1,.3,1);will-change:transform,opacity}
 @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
 .united-bar.open .united-list{flex:1 1 auto}
 /* calendar */
