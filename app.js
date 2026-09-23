@@ -208,6 +208,7 @@ function setSelectMode(on){
   selectMode=on; selected.clear();
   document.body.classList.toggle('selecting',on);
   $('selectBtn').classList.toggle('on',on);
+  $('fabBtn').style.display=on?'none':'';
   renderSelBar(); render();
 }
 function renderSelBar(){
@@ -493,16 +494,42 @@ function askDanger(o){
 $('dangerInput').addEventListener('input',(e)=>{ $('dangerGo').disabled = e.target.value.trim().toUpperCase()!==$('dangerWord').textContent; });
 $('dangerCancel').onclick=()=>$('dangerModal').classList.add('hidden');
 $('dangerGo').onclick=()=>{ $('dangerModal').classList.add('hidden'); if(dangerAction){ const a=dangerAction; dangerAction=null; a(); } };
-/* ——— United ribbon collapse (crest-only until tapped) ——— */
+/* ——— United fixtures live in a topbar-crest popup (not a full bar) ——— */
 function toggleUtd(force){
   const bar=$('unitedBar'); if(!bar) return;
-  const open = force!==undefined?force:bar.classList.contains('collapsed');
-  bar.classList.toggle('collapsed', !open);
+  const open = force!==undefined?force:!bar.classList.contains('open');
+  bar.classList.toggle('open', open);
   try{ localStorage.setItem('qb.united.open', open?'1':'0'); }catch{}
 }
 (function initUtdCollapsed(){
-  try{ if(localStorage.getItem('qb.united.open')!=='1'){ const b=$('unitedBar'); if(b) b.classList.add('collapsed'); } }catch{}
+  try{ if(localStorage.getItem('qb.united.open')==='1'){ const b=$('unitedBar'); if(b) b.classList.add('open'); } }catch{}
 })();
+$('utdBtn').onclick=()=>toggleUtd();
+// auto matchday card: once per matchday, on first open that day (a closed web app can't fire at midnight)
+const UTD_AUTO_KEY='quickboard.utd.auto';
+function maybeAutoMatchday(games){
+  if(!games||!games.length) return;
+  const today=todayStr();
+  let last=''; try{ last=localStorage.getItem(UTD_AUTO_KEY)||''; }catch{}
+  if(last===today) return;
+  const todays=games.filter(g=>g.d===today);
+  try{ localStorage.setItem(UTD_AUTO_KEY,today); }catch{}
+  if(!todays.length) return;
+  const board=state.boards[0]; if(!board) return;
+  const col=board.columns.find(c=>/today/i.test(c.name))||board.columns[0];
+  let added=0;
+  todays.forEach(x=>{
+    const title=`⚽ MATCHDAY: ${shortTeam(x.h)} vs ${shortTeam(x.a)} — ${fmtD(x.d)}`;
+    if(state.cards.some(c=>c.boardId===board.id&&c.title===title)) return;
+    state.cards.unshift({
+      id:uid(),boardId:board.id,colId:col.id,title,
+      details:`🏆 Premier League\n📅 ${fmtDate(x.d)} — TODAY, come on United!\n🔗 https://www.manutd.com/en`,
+      tags:['football','manutd','matchday'],priority:'high',due:x.d,createdAt:Date.now()
+    });
+    added++;
+  });
+  if(added){ state.activeBoardId=board.id; save(); render(); toast(`⚽ Matchday card${added>1?'s':''} added ✓`); }
+}
 /* ——— meeting-intel: parse invites pasted into Details ——— */
 const MON={january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12};
 function detectMeeting(text){
@@ -683,10 +710,14 @@ const QA_TPLS=['#errand !high','due:today !high','due:tomorrow','#idea','@Quick 
   });
 })();
 function expandQa(){ $('quickadd').classList.add('expanded'); }
+// quick-add lives behind the FAB; N key or FAB reveals it, blur-empty hides it again
+function showQa(){ $('quickadd').classList.remove('hidden'); expandQa(); const i=$('quickInput'); if(i) i.focus(); }
+function hideQa(){ $('quickadd').classList.add('hidden'); }
+$('fabBtn').onclick=()=>showQa();
 function maybeCollapseQa(){
   const qa=$('quickadd');
   if(qa.contains(document.activeElement)) return; // focus moved to date/priority/tag/mic — keep open
-  if(!$('quickInput').value) qa.classList.remove('expanded');
+  if(!$('quickInput').value){ qa.classList.remove('expanded'); hideQa(); }
 }
 $('quickInput').addEventListener('focus',()=>{ expandQa(); refreshQaMeta(); });
 $('quickInput').addEventListener('blur',()=>{ setTimeout(maybeCollapseQa,150); });
@@ -827,7 +858,7 @@ $('quickInput').addEventListener('keydown',(e)=>{
   doQuickAdd();
 });
 document.addEventListener('keydown',(e)=>{
-  if(e.key==='n'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();$('quickInput').focus();}
+  if(e.key==='n'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();showQa();}
   if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();$('searchInput').focus();}
   if(e.key==='Escape'){
     if(selectMode){ setSelectMode(false); return; }
@@ -872,6 +903,51 @@ $('mDelete').onclick=()=>{
   state.cards=state.cards.filter(x=>x.id!==editingId);
   $('cardModal').classList.add('hidden'); save(); render();
 };
+
+// --- calendar view (subtle topbar icon → full modal) ---
+let calY=0, calM=0, calSel='';
+function openCal(){
+  const t=new Date(); calY=t.getFullYear(); calM=t.getMonth(); calSel=todayStr();
+  $('calModal').classList.remove('hidden'); renderCal();
+}
+function renderCal(){
+  const map={};
+  state.cards.forEach(c=>{ if(!c.due) return; (map[c.due]=map[c.due]||[]).push(c); });
+  const first=new Date(calY,calM,1);
+  const startDay=(first.getDay()+6)%7; // Monday-first
+  const dim=new Date(calY,calM+1,0).getDate();
+  const today=todayStr();
+  $('calTitle').textContent=first.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const g=$('calGrid'); g.innerHTML='';
+  ['M','T','W','T','F','S','S'].forEach(n=>{ const e=document.createElement('div'); e.className='cal-dow'; e.textContent=n; g.appendChild(e); });
+  for(let i=0;i<startDay;i++){ const e=document.createElement('div'); e.className='cal-day-cell dim'; g.appendChild(e); }
+  for(let d=1;d<=dim;d++){
+    const iso=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const items=map[iso]||[];
+    const e=document.createElement('div');
+    e.className='cal-day-cell'+(iso===today?' today':'')+(iso===calSel?' sel':'');
+    e.innerHTML=`<b>${d}</b>`+(items.length?`<span class="cal-dots">${items.slice(0,3).map(()=>`<span class="cal-dot${isOverdue(iso)?' over':''}"></span>`).join('')}</span><small>${items.length}</small>`:'');
+    e.onclick=()=>{ calSel=iso; renderCal(); };
+    g.appendChild(e);
+  }
+  const list=$('calDay'); list.innerHTML='';
+  const items=(map[calSel]||[]).slice().sort((a,b)=>a.title.localeCompare(b.title));
+  if(!items.length){ list.innerHTML='<span class="muted">No cards due this day.</span>'; return; }
+  items.forEach(c=>{
+    const b=state.boards.find(x=>x.id===c.boardId);
+    const row=document.createElement('div'); row.className='cal-item';
+    row.innerHTML=`<span class="cal-item-t"></span><span class="cal-item-b"></span>`;
+    row.children[0].textContent=c.title;
+    row.children[1].textContent=(b?b.name:'?')+(isOverdue(c.due)?' • overdue':'');
+    row.onclick=()=>{ $('calModal').classList.add('hidden'); state.activeBoardId=c.boardId; save(true); render(); openCardModal(c.id); };
+    list.appendChild(row);
+  });
+}
+$('calBtn').onclick=openCal;
+$('calClose').onclick=()=>$('calModal').classList.add('hidden');
+$('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
+$('calNext').onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
+$('calTodayBtn').onclick=()=>{ const t=new Date(); calY=t.getFullYear(); calM=t.getMonth(); calSel=todayStr(); renderCal(); };
 
 // --- import / export ---
 $('importBtn').onclick=()=>{
@@ -1014,7 +1090,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v48';
+const APP_VER = 'v49';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1157,6 +1233,7 @@ async function loadUnited(){
     nextEl.innerHTML=html;
     if(next && next.d===today){ cntEl.textContent='🔴 MATCHDAY'; cntEl.classList.add('live'); }
     else if(next){ const days=Math.round((new Date(next.d)-new Date(today))/86400000); cntEl.textContent=days<=1?'⏳ Tomorrow':`⏳ ${days} days`; cntEl.classList.remove('live'); }
+    const dot=$('utdDot'); if(dot) dot.classList.toggle('hidden', !(next&&next.d===today));
     listEl.innerHTML=todo.slice(1,7).map((x,i)=>`<span class="united-match tap" data-i="${i+1}" title="Tap to create matchday card"><b>${fmtD(x.d)}</b> ${shortTeam(x.h)} vs ${shortTeam(x.a)}<span class="plus">＋</span></span>`).join('');
     listEl.querySelectorAll('.tap').forEach(el=>{
       el.onclick=()=>createMatchdayCard(todo.slice(0,7)[+el.dataset.i]);
@@ -1167,7 +1244,7 @@ async function loadUnited(){
   };
   const badge=document.querySelector('.united-badge'); if(badge) badge.onclick=()=>toggleUtd();
   function forceUtdRefresh(){ try{localStorage.removeItem(UTD_CACHE_KEY);}catch{} gamesTs=0; loadUnited(); }
-  if(games) renderUtd(games);
+  if(games){ renderUtd(games); maybeAutoMatchday(games); }
   else renderUtd(UTD_FALLBACK.map(x=>({d:x.d,h:x.h,a:x.a,s:x.s,fin:false})));
   try{
     const r=await fetch(UTD_API); if(!r.ok) return;
@@ -1178,7 +1255,7 @@ async function loadUnited(){
       let cd=''; if(dt>=todayStr()){ const ms=new Date(dt)-new Date(todayStr()); const dd=Math.floor(ms/86400000); cd=dd===0?'today':dd+'d'; }
       return {d:dt,h:m.team1.teamName,a:m.team2.teamName,s,fin:!!m.matchIsFinished,cd};
     });
-    if(g.length){ games=g; gamesTs=Date.now(); try{localStorage.setItem(UTD_CACHE_KEY,JSON.stringify({ts:gamesTs,games:g}));}catch{} renderUtd(g); }
+    if(g.length){ games=g; gamesTs=Date.now(); try{localStorage.setItem(UTD_CACHE_KEY,JSON.stringify({ts:gamesTs,games:g}));}catch{} renderUtd(g); maybeAutoMatchday(g); }
   }catch(e){ /* offline — fallback already shown */ }
 }
 function createMatchdayCard(x){
