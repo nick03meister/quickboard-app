@@ -1,5 +1,5 @@
-const CACHE = 'quickboard-v52';
-const ASSETS = ['./', './index.html', './styles.css?v=52', './app.js?v=52', './firebase-config.js?v=52', './manutd-crest.webp', './icon-192.png', './icon-512.png', './icon-maskable.png', './icon-180.png', './manifest.webmanifest'];
+const CACHE = 'quickboard-v53';
+const ASSETS = ['./', './index.html', './styles.css?v=53', './app.js?v=53', './firebase-config.js?v=53', './manutd-crest.webp', './icon-192.png', './icon-512.png', './icon-maskable.png', './icon-180.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(

@@ -214,12 +214,19 @@ function refreshSearchMeta(){
     const b=activeBoard();
     const here=state.cards.filter(c=>c.boardId===b?.id&&match(c)).length;
     const away=state.cards.filter(c=>c.boardId!==b?.id&&match(c)).length;
-    el.textContent = away?`${here} here · ${away} elsewhere — view`:`${here} match${here===1?'':'es'}`;
+    el.textContent = away?`${here} here · ${away} elsewhere →`:`${here} match${here===1?'':'es'}`;
     el.onclick = away?()=>{ state.activeBoardId='__all'; save(true); render(); }:null;
     el.classList.toggle('link',!!away);
   }
-  const cf=$('clearFilters'); if(cf) cf.disabled=!(f.q||f.tag||f.pri||f.due);
+  const cf=$('clearFilters'); if(cf) cf.classList.toggle('hidden',!(f.q||f.tag||f.pri||f.due));
 }
+// logo = home: All boards, filters cleared, selection dropped
+document.querySelector('.brand').onclick=()=>{
+  if(selectMode) setSelectMode(false);
+  $('searchInput').value=''; $('filterTag').value=''; $('filterPriority').value=''; $('filterDue').value='';
+  state.activeBoardId='__all'; save(true); render();
+  window.scrollTo({top:0,behavior:'smooth'});
+};
 // --- multi-select (bulk delete) ---
 let selectMode=false; const selected=new Set();
 function setSelectMode(on){
@@ -1018,7 +1025,7 @@ function toast(msg){
   clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2800);
 }
 const IMPORT_SINGLE_KEY='quickboard.importSingle';
-function importSingle(){ try{ return localStorage.getItem(IMPORT_SINGLE_KEY)==='1'; }catch{ return false; } }
+function importSingle(){ try{ const v=localStorage.getItem(IMPORT_SINGLE_KEY); return v===null?true:v==='1'; }catch{ return true; } }
 function importLineCount(){ return $('importText').value.split('\n').map(s=>s.trim()).filter(Boolean).length; }
 function refreshImportCount(){
   const el=$('importCount'); if(!el) return;
@@ -1131,7 +1138,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v52';
+const APP_VER = 'v53';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
