@@ -337,7 +337,16 @@ function renderTabs(){
     if(state.boards.length>1){
       const x = document.createElement('span');
       x.className='x'; x.textContent='×'; x.title='Delete board';
-      x.onclick=(e)=>{ e.stopPropagation(); if(state.boards.length<=1){ alert('Keep at least 1 board.'); return; } if(confirm(`Delete board "${b.name}" + its cards?`)){ state.boards = state.boards.filter(z=>z.id!==b.id); state.cards = state.cards.filter(c=>c.boardId!==b.id); state.activeBoardId = state.boards[0]?.id; save(); render(); } };
+      x.onclick=(e)=>{ e.stopPropagation(); if(state.boards.length<=1){ alert('Keep at least 1 board.'); return; }
+        const n=state.cards.filter(c=>c.boardId===b.id).length;
+        takeSnapshot('pre-board-delete');
+        askDanger({
+          title:`Delete board "${b.name}"?`,
+          desc:`This removes the board and its ${n} card${n===1?'':'s'} on ALL synced devices. A safety backup is saved first — restore it from Sync settings if this was a mistake.`,
+          word:(b.name||'DELETE').toUpperCase(), goLabel:'Delete board',
+          action:()=>{ state.boards = state.boards.filter(z=>z.id!==b.id); state.cards = state.cards.filter(c=>c.boardId!==b.id); state.activeBoardId = state.boards[0]?.id; save(); render(); }
+        });
+      };
       btn.appendChild(x);
     }
     tabsEl.appendChild(btn);
@@ -1231,7 +1240,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v58';
+const APP_VER = 'v61';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1249,6 +1258,7 @@ function getEffectiveCfg(){
 function pushToCloud(){
   const eff = getEffectiveCfg();
   if(!eff.cfg||!window._qbDb||cloudBusy) return;
+  if(!state.boards.length){ console.warn('sync: refusing to push 0-board state'); return; }
   cloudBusy=true;
   window._qbDb.collection('quickboards').doc(eff.key).set({state, updatedAt:Date.now()},{merge:true})
     .then(()=>{ lastSyncAt=Date.now(); stampSyncLine(); })
@@ -1267,6 +1277,21 @@ function applyRemote(data){
   }
   if(localStorage.getItem(LS_KEY)===JSON.stringify(remote)) { lastSyncAt=Date.now(); stampSyncLine(); return true; }
   if((data.updatedAt||0) > (state._ts||0)){
+    const remoteBoards=(remote.boards||[]).length, localBoards=(state.boards||[]).length;
+    // Destructive direction guard: cloud with FEWER boards never auto-wipes local ones.
+    // (A fresh/stale device pushing defaults used to nuke renamed boards everywhere.)
+    // Convergence then needs a manual, type-confirmed Force-pull. Card edits still flow.
+    if(remoteBoards < localBoards){
+      console.warn(`sync: held — cloud has ${remoteBoards} boards, local has ${localBoards}; keeping local`);
+      const now=Date.now();
+      if(!applyRemote._heldAt || now-applyRemote._heldAt>10*60*1000){
+        applyRemote._heldAt=now;
+        toast('Sync held: cloud is missing boards — kept yours. Use Force-pull to converge.');
+      }
+      lastSyncAt=Date.now(); stampSyncLine();
+      return false;
+    }
+    takeSnapshot('pre-sync'); // any cloud replace stays restorable from backups
     const keepBoard = state.activeBoardId;
     state=remote; state.activeBoardId=state.activeBoardId||keepBoard||state.boards[0]?.id;
     healState();
@@ -1298,7 +1323,7 @@ function stampSyncLine(){
 setInterval(stampSyncLine, 5000);
 function initCloud(){
   const eff = getEffectiveCfg(); if(!eff.cfg) return;
-  if(window._qbDb){ pushToCloud(); listenCloud(); return; }
+  if(window._qbDb){ syncHandshake(); listenCloud(); return; }
   const loadScript=(src)=>new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   const st = $('syncStatus'); if (st) st.textContent='Connecting…';
   (async()=>{
@@ -1312,9 +1337,21 @@ function initCloud(){
       window._qbDb=firebase.firestore();
       cloudOn=true; if (st) st.textContent='Sync connected ✓ • key: '+eff.key;
       lastSyncAt=Date.now(); stampSyncLine();
-      pushToCloud(); listenCloud(); pullFromCloud(true);
+      listenCloud();
+      syncHandshake();
     }catch(e){ console.warn(e); if (st) st.textContent='Sync failed — check config + enable Anonymous auth. Still local-first.'; }
   })();
+}
+// Pull-first handshake: a fresh/stale device adopts the cloud copy and NEVER
+// overwrites it with local defaults. pushToCloud only seeds an empty cloud slot.
+function syncHandshake(){
+  const eff = getEffectiveCfg();
+  if(!eff.cfg||!window._qbDb) return;
+  window._qbDb.collection('quickboards').doc(eff.key).get().then((doc)=>{
+    if(doc.exists){ applyRemote(doc.data()); }
+    else { pushToCloud(); }
+    pullFromCloud(true);
+  }).catch(()=>{ pullFromCloud(true); }); // offline: never push on a failed read (could seed defaults over good cloud data)
 }
 let unsub=null;
 function listenCloud(){
