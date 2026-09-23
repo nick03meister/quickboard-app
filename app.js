@@ -866,7 +866,7 @@ document.addEventListener('keydown',(e)=>{
   }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); doUndo(); }
 });
-['searchInput','filterTag','filterPriority','filterDue'].forEach(id=>$(id).addEventListener('input',()=>renderBoard()));
+['searchInput','filterTag','filterPriority','filterDue'].forEach(id=>$(id).addEventListener('input',()=>render())); // full render: keeps match counts + cross-board hint live while typing
 
 // --- boards ---
 $('addBoardBtn').onclick=()=>{
@@ -1090,7 +1090,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v49';
+const APP_VER = 'v50';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
