@@ -38,6 +38,18 @@ function defaultState(){
 
 let state = load();
 healState();
+// last real board (not __all): "+" targets it when no @board routes elsewhere
+let lastBoardId=null; try{ lastBoardId=localStorage.getItem('qb.lastBoard'); }catch{}
+function trackBoard(){
+  if(state.activeBoardId&&state.activeBoardId!=='__all'&&state.activeBoardId!==lastBoardId){
+    lastBoardId=state.activeBoardId; try{ localStorage.setItem('qb.lastBoard',lastBoardId); }catch{}
+  }
+}
+function fallbackBoard(){
+  return (lastBoardId&&state.boards.find(b=>b.id===lastBoardId))
+    || state.boards.find(b=>b.id===state.activeBoardId)
+    || state.boards[0];
+}
 function load(){
   try{
     const raw = localStorage.getItem(LS_KEY);
@@ -199,6 +211,7 @@ function boardCards(boardId){
 
 // --- render ---
 function render(){
+  trackBoard();
   renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats(); refreshQaMeta(); refreshSearchMeta(); refreshUndoBtn(); renderSelBar();
 }
 // --- search result count + cross-board hint ---
@@ -346,9 +359,10 @@ function renderAllBoard(){
     colDiv.querySelector('.col-name').textContent=name;
     colDiv.querySelector('[data-act="sel"]').onclick=()=>setSelectMode(true);
     colDiv.querySelector('.add-inline').onclick=()=>{
-      const t=prompt(`New card in column "${name}" (use @Board to route, else ${state.boards[0]?.name}):`); if(!t||!t.trim())return;
+      const fb=fallbackBoard();
+      const t=prompt(`New card in column "${name}" (use @Board to route, else ${fb?.name}):`); if(!t||!t.trim())return;
       const p=parseQuick(t.trim());
-      const tb=(p.boardId&&state.boards.find(x=>x.id===p.boardId))||state.boards[0]; if(!tb)return;
+      const tb=(p.boardId&&state.boards.find(x=>x.id===p.boardId))||fb; if(!tb)return;
       const rc=realColFor(tb.id,name)||tb.columns[0];
       state.cards.unshift({id:uid(),boardId:tb.id,colId:rc.id,title:p.title||t,details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
       $('quickDue').value=''; save(); render();
@@ -445,30 +459,35 @@ function cardNode(c, board, colIdx){
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
   d.ondragend=()=>d.classList.remove('dragging');
   d.querySelector('[data-a="edit"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
-  // long-press (550ms, touch or mouse) enters select mode — the mobile-native pattern
-  // (tolerates ~10px finger jitter; bigger moves cancel it and may start a drag instead)
-  let pressT=null, pressPos=null;
-  const startPress=(e)=>{ if(selectMode||pressT) return; pressPos={x:e.clientX,y:e.clientY}; pressT=setTimeout(()=>{ pressT=null; pressPos=null; setSelectMode(true); selected.add(c.id); renderSelBar(); render(); },550); };
-  const cancelPress=()=>{ if(pressT){ clearTimeout(pressT); pressT=null; pressPos=null; } };
-  d.addEventListener('pointerdown',startPress);
-  d.addEventListener('pointerup',cancelPress);
-  d.addEventListener('pointermove',(e)=>{ if(pressT&&pressPos&&Math.hypot(e.clientX-pressPos.x,e.clientY-pressPos.y)>10) cancelPress(); });
-  d.addEventListener('pointercancel',cancelPress);
-  d.addEventListener('contextmenu',(e)=>{ if(selectMode||pressT) e.preventDefault(); });
-  // touch drag-and-drop (HTML5 DnD is mouse-only): hold + move lifts a ghost, drop on a column
-  let tdrag=null;
+  // press gestures: tap = open/toggle, 550ms hold = select, hold+move = drag.
+  // mouse keeps native HTML5 DnD; touch uses the custom ghost below.
+  // (one unified block: separate long-press/drag handlers fought over the same gesture)
+  let pressT=null, clickSupp=false, tdrag=null;
+  const cancelPress=()=>{ if(pressT){ clearTimeout(pressT); pressT=null; } };
   d.addEventListener('pointerdown',(e)=>{
-    if(e.pointerType==='mouse'||selectMode) return;
-    const sx=e.clientX, sy=e.clientY;
+    if(selectMode) return;
+    const sx=e.clientX, sy=e.clientY, isMouse=e.pointerType==='mouse';
+    pressT=setTimeout(()=>{
+      pressT=null; clickSupp=true;
+      // enter select WITHOUT re-render: rebuilding the DOM mid-gesture kills it
+      selectMode=true; selected.add(c.id);
+      document.body.classList.add('selecting');
+      $('selectBtn').classList.add('on'); $('fabBtn').style.display='none';
+      renderSelBar(); d.classList.add('selected');
+    },550);
     const move=(ev)=>{
+      const moved=Math.hypot(ev.clientX-sx,ev.clientY-sy);
+      if(pressT&&moved>10) cancelPress();
+      if(isMouse||!moved) return;
       if(!tdrag){
-        if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<12) return;
+        if(moved<12) return;
         cancelPress();
         tdrag={id:c.id,ghost:d.cloneNode(true)};
         const r=d.getBoundingClientRect();
         Object.assign(tdrag.ghost.style,{position:'fixed',left:r.left+'px',top:r.top+'px',width:r.width+'px',opacity:'.92',pointerEvents:'none',zIndex:200});
         d.style.touchAction='none';
         document.body.appendChild(tdrag.ghost);
+        clickSupp=true;
       }
       tdrag.ghost.style.left=(ev.clientX-tdrag.ghost.offsetWidth/2)+'px';
       tdrag.ghost.style.top=(ev.clientY-44)+'px';
@@ -480,6 +499,7 @@ function cardNode(c, board, colIdx){
     const up=(ev)=>{
       d.removeEventListener('pointermove',move); d.removeEventListener('pointerup',up); d.removeEventListener('pointercancel',up);
       d.style.touchAction='';
+      cancelPress();
       if(!tdrag) return;
       const g=tdrag; tdrag=null; g.ghost.remove();
       document.querySelectorAll('.col.drag-over').forEach(x=>x.classList.remove('drag-over'));
@@ -491,7 +511,9 @@ function cardNode(c, board, colIdx){
     d.addEventListener('pointerup',up);
     d.addEventListener('pointercancel',up);
   });
+  d.addEventListener('contextmenu',(e)=>{ if(selectMode||pressT) e.preventDefault(); });
   d.onclick=()=>{
+    if(clickSupp){ clickSupp=false; return; } // lift after hold/drag must not open or toggle
     if(selectMode){ selected.has(c.id)?selected.delete(c.id):selected.add(c.id); d.classList.toggle('selected',selected.has(c.id)); renderSelBar(); }
     else openCardModal(c.id);
   };
@@ -769,7 +791,7 @@ function rememberSmart(boardId, tags, priority){
   }catch{}
 }
 function refreshQaMeta(){
-  const b=activeBoard();
+  const b=fallbackBoard();
   const t=$('qaTarget');
   if(t) t.textContent = b?`→ ${b.name} → ${b.columns[0]?.name||''}` : '';
   const st=$('smartTags'); if(!st) return;
@@ -933,7 +955,7 @@ function doQuickAdd(){
   const inp=$('quickInput'); const v=inp.value.trim(); if(!v)return;
   const p=parseFull(v);
   if(!p.title){alert('Type a title');return;}
-  const b=(p.boardId && state.boards.find(x=>x.id===p.boardId)) || activeBoard();
+  const b=(p.boardId && state.boards.find(x=>x.id===p.boardId)) || fallbackBoard();
   const firstCol=b.columns[0].id;
   state.cards.unshift({id:uid(),boardId:b.id,colId:firstCol,title:p.title,details:p.details,tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
   inp.value=''; inp.style.height='auto'; $('quickDue').value='';
@@ -1050,7 +1072,7 @@ $('calTodayBtn').onclick=()=>{ const t=new Date(); calY=t.getFullYear(); calM=t.
 // --- import / export ---
 $('importBtn').onclick=()=>{
   $('importBoard').innerHTML=state.boards.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
-  $('importBoard').value=(state.activeBoardId==='__all'?(state.boards[0]&&state.boards[0].id):state.activeBoardId);
+  $('importBoard').value=(state.activeBoardId==='__all'?((fallbackBoard()||{}).id):state.activeBoardId);
   $('importSingle').checked=importSingle();
   $('importModal').classList.remove('hidden');
   refreshImportCount();
@@ -1188,7 +1210,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v54';
+const APP_VER = 'v56';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
