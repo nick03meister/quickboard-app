@@ -61,6 +61,11 @@ function healState(){
   });
   return fixed;
 }
+// NOTE: $/boardEl/tabsEl live up here (not in render section): top-level wiring
+// like $('undoBtn').onclick runs at load, before later declarations would exist (TDZ crash).
+const $ = (id)=>document.getElementById(id);
+const boardEl = $('board'), tabsEl = $('boardTabs');
+
 // --- undo: pre-change snapshots, captured automatically on every real mutation ---
 const undoStack=[];
 function save(localOnly, skipUndo){
@@ -176,9 +181,6 @@ function boardCards(boardId){
 }
 
 // --- render ---
-const $ = (id)=>document.getElementById(id);
-const boardEl = $('board'), tabsEl = $('boardTabs');
-
 function render(){
   renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats(); refreshQaMeta(); refreshSearchMeta(); refreshUndoBtn(); renderSelBar();
 }
@@ -1012,7 +1014,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v47';
+const APP_VER = 'v48';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
