@@ -201,6 +201,7 @@ function refreshSearchMeta(){
     el.onclick = away?()=>{ state.activeBoardId='__all'; save(true); render(); }:null;
     el.classList.toggle('link',!!away);
   }
+  const cf=$('clearFilters'); if(cf) cf.disabled=!(f.q||f.tag||f.pri||f.due);
 }
 // --- multi-select (bulk delete) ---
 let selectMode=false; const selected=new Set();
@@ -317,8 +318,16 @@ function renderAllBoard(){
       const rc=realColFor(c.boardId,name); if(!rc||c.colId!==rc.id) return false;
       return cardMatches(c,f);
     }).sort((a,c2)=>(a.due||'9999')<(c2.due||'9999')?-1:1);
-    colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span></div><div class="cards"></div>`;
+    colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span></div><div class="cards"></div><button class="add-inline">+ Add card</button>`;
     colDiv.querySelector('.col-name').textContent=name;
+    colDiv.querySelector('.add-inline').onclick=()=>{
+      const t=prompt(`New card in column "${name}" (use @Board to route, else ${state.boards[0]?.name}):`); if(!t||!t.trim())return;
+      const p=parseQuick(t.trim());
+      const tb=(p.boardId&&state.boards.find(x=>x.id===p.boardId))||state.boards[0]; if(!tb)return;
+      const rc=realColFor(tb.id,name)||tb.columns[0];
+      state.cards.unshift({id:uid(),boardId:tb.id,colId:rc.id,title:p.title||t,details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
+      $('quickDue').value=''; save(); render();
+    };
     colDiv.ondragover=(e)=>{e.preventDefault();colDiv.classList.add('drag-over');};
     colDiv.ondragleave=()=>colDiv.classList.remove('drag-over');
     colDiv.ondrop=(e)=>{
@@ -714,6 +723,8 @@ function expandQa(){ $('quickadd').classList.add('expanded'); }
 function showQa(){ $('quickadd').classList.remove('hidden'); expandQa(); const i=$('quickInput'); if(i) i.focus(); }
 function hideQa(){ $('quickadd').classList.add('hidden'); }
 $('fabBtn').onclick=()=>showQa();
+$('qaClose').onclick=()=>{ try{$('quickInput').blur();}catch{} hideQa(); };
+$('clearFilters').onclick=()=>{ $('searchInput').value=''; $('filterTag').value=''; $('filterPriority').value=''; $('filterDue').value=''; render(); };
 function maybeCollapseQa(){
   const qa=$('quickadd');
   if(qa.contains(document.activeElement)) return; // focus moved to date/priority/tag/mic — keep open
@@ -877,11 +888,12 @@ $('addBoardBtn').onclick=()=>{
 };
 
 // --- card modal ---
-let editingId=null;
+let editingId=null, calReturn=false;
 function openCardModal(id){
   const c=state.cards.find(x=>x.id===id); if(!c)return;
   editingId=id; const b=state.boards.find(x=>x.id===c.boardId);
   $('modalTitle').textContent=`Edit — ${b?.name||''}`;
+  $('mBackCal').classList.toggle('hidden',!calReturn);
   $('mTitle').value=c.title; $('mDetails').value=c.details||'';
   $('mTags').value=(c.tags||[]).join(', '); $('mDue').value=c.due||''; $('mPriority').value=c.priority||'';
   $('mColumn').innerHTML=(b?.columns||[]).map(col=>`<option value="${col.id}">${col.name}</option>`).join('');
@@ -890,18 +902,19 @@ function openCardModal(id){
   autoDetectModal();
   $('cardModal').classList.remove('hidden');
 }
-$('mCancel').onclick=()=>$('cardModal').classList.add('hidden');
+$('mCancel').onclick=()=>{ calReturn=false; $('cardModal').classList.add('hidden'); };
+$('mBackCal').onclick=()=>{ calReturn=false; $('cardModal').classList.add('hidden'); $('calModal').classList.remove('hidden'); renderCal(); };
 $('mSave').onclick=()=>{
   const c=state.cards.find(x=>x.id===editingId); if(!c)return;
   c.title=$('mTitle').value.trim()||c.title; c.details=$('mDetails').value;
   c.tags=$('mTags').value.split(',').map(s=>sanitizeTag(s.trim().replace(/^#/,''))).filter(Boolean);
   c.due=$('mDue').value; c.priority=$('mPriority').value; c.colId=$('mColumn').value;
-  $('cardModal').classList.add('hidden'); save(); render();
+  calReturn=false; $('cardModal').classList.add('hidden'); save(); render();
 };
 $('mDelete').onclick=()=>{
   if(!confirm('Delete this card?'))return;
   state.cards=state.cards.filter(x=>x.id!==editingId);
-  $('cardModal').classList.add('hidden'); save(); render();
+  calReturn=false; $('cardModal').classList.add('hidden'); save(); render();
 };
 
 // --- calendar view (subtle topbar icon → full modal) ---
@@ -939,7 +952,7 @@ function renderCal(){
     row.innerHTML=`<span class="cal-item-t"></span><span class="cal-item-b"></span>`;
     row.children[0].textContent=c.title;
     row.children[1].textContent=(b?b.name:'?')+(isOverdue(c.due)?' • overdue':'');
-    row.onclick=()=>{ $('calModal').classList.add('hidden'); state.activeBoardId=c.boardId; save(true); render(); openCardModal(c.id); };
+    row.onclick=()=>{ calReturn=true; $('calModal').classList.add('hidden'); state.activeBoardId=c.boardId; save(true); render(); openCardModal(c.id); };
     list.appendChild(row);
   });
 }
@@ -1090,7 +1103,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v50';
+const APP_VER = 'v51';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1278,6 +1291,7 @@ function createMatchdayCard(x){
 
 /* ——— boot ——— */
 try{
+  hideQa(); // composer starts closed behind the FAB; never a dead gap at top
   render();
   stampSyncLine();
   initCloud();

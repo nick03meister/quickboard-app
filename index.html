@@ -9,12 +9,12 @@
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icon-192.png" />
 <link rel="apple-touch-icon" href="./icon-180.png" />
-<link rel="stylesheet" href="./styles.css?v=50" />
+<link rel="stylesheet" href="./styles.css?v=51" />
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo"><img src="./manutd-crest.webp?v=50" alt="Manchester United" /></div>
+    <div class="logo"><img src="./manutd-crest.webp?v=51" alt="Manchester United" /></div>
     <div>
       <div class="brand-title">QuickBoard</div>
       <div class="brand-sub">daily capture • kanban</div>
@@ -23,6 +23,7 @@
   <div class="top-actions">
     <input id="searchInput" class="search" type="search" placeholder="Search cards…  ( / )" autocomplete="off" />
     <span id="searchMeta" class="search-meta" title="Matching cards"></span>
+    <button id="clearFilters" class="btn ghost" title="Clear search and all filters">✕ Clear</button>
     <select id="filterTag" title="Filter by tag"><option value="">All tags</option></select>
     <select id="filterPriority" title="Filter by priority">
       <option value="">All priorities</option>
@@ -38,7 +39,7 @@
       <option value="nodate">No date</option>
     </select>
     <button id="calBtn" class="btn ghost" title="Calendar view">📅</button>
-    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=50" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
+    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=51" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
     <button id="undoBtn" class="btn ghost" title="Undo last change (Ctrl+Z)" disabled>↩</button>
     <button id="selectBtn" class="btn ghost" title="Select multiple cards to delete">Select</button>
     <button id="syncNowBtn" class="btn ghost" title="Pull latest from cloud now">⟳</button>
@@ -66,6 +67,7 @@
       <button data-l="en-US" class="on">EN</button><button data-l="hi-IN">हिंदी</button>
     </div>
     <button id="quickAddBtn" class="btn primary">Add</button>
+    <button id="qaClose" class="btn ghost" title="Close quick add">✕</button>
   </div>
   <div class="qa-row details" id="qaDetails">
     <select id="quickTag" title="Add hashtag">
@@ -86,7 +88,7 @@
 </section>
 
 <section id="unitedBar" class="united-bar">
-  <div class="united-badge"><img src="./manutd-crest.webp?v=50" alt="MUFC" /></div>
+  <div class="united-badge"><img src="./manutd-crest.webp?v=51" alt="MUFC" /></div>
   <div class="united-next" id="unitedNext">Loading United fixtures…</div>
   <div class="united-count" id="unitedCount"></div>
   <div class="united-list" id="unitedList"></div>
@@ -98,7 +100,7 @@
 <footer class="footer">
   <span id="statsLine">—</span>
   <span class="dot">•</span>
-  <span id="verLine">v50 • checking sync…</span>
+  <span id="verLine">v51 • checking sync…</span>
   <span class="dot">•</span>
   <span>Add to Home Screen on Samsung for app mode</span>
 </footer>
@@ -118,6 +120,7 @@
       <label>Column<select id="mColumn"></select></label>
     </div>
     <div class="modal-actions">
+      <button id="mBackCal" class="btn ghost hidden" title="Back to calendar">← Calendar</button>
       <button id="mDelete" class="btn danger">Delete</button>
       <div class="spacer"></div>
       <button id="mCancel" class="btn ghost">Cancel</button>
@@ -241,8 +244,8 @@
   <button id="selDoneBtn" class="mini" title="Exit select mode">Done</button>
 </div>
 
-<script src="./firebase-config.js?v=50"></script>
-<script src="./app.js?v=50"></script>
+<script src="./firebase-config.js?v=51"></script>
+<script src="./app.js?v=51"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
