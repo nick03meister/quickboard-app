@@ -672,13 +672,22 @@ function finishVoice(cancelled){
   // stop() flushes pending finals ~instantly; wait a beat so newest words aren't lost
   voiceCommitT=setTimeout(()=>commitVoice(cancelled), cancelled?0:800);
 }
+const TITLE_SKIP=/(January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|\d{1,2}:\d{2}|https?:|time zone|timezone|joining info|video call|meeting link|dial[ -]?in|passcode|organizer|attendees|^when:|^where:)/i;
+function pickTitle(lines){
+  for(const ln of lines.slice(0,4)){
+    const t=ln.trim();
+    if(t.length>=4 && !TITLE_SKIP.test(t)) return t.slice(0,120);
+  }
+  return (lines[0]||'').slice(0,120);
+}
 function parseFull(raw){
   // one-step capture: first line = title, rest = details; tokens + meeting intel over everything
   const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const p=parseQuick(lines.join('\n'));
   const plines=p.title.split('\n').map(s=>s.trim()).filter(Boolean);
-  const title=(plines[0]||'').slice(0,200);
-  const details=plines.slice(1).join('\n').slice(0,2000);
+  const title=pickTitle(plines);
+  const ti=plines.indexOf(title);
+  const details=(ti>=0?[...plines.slice(0,ti),...plines.slice(ti+1)]:plines).join('\n').slice(0,2000);
   const intel=detectMeeting(p.title);
   let {tags, priority, due, boardId} = p;
   if(intel.due && !due) due=intel.due;
@@ -861,7 +870,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v43';
+const APP_VER = 'v44';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
