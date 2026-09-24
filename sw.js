@@ -1,4 +1,4 @@
-const CACHE = 'quickboard-v84';
+const CACHE = 'quickboard-v85';
 const ASSETS = ['./', './index.html', './styles.css?v=84', './app.js?v=84', './firebase-config.js?v=84', './manutd-crest.webp', './icon-192.png', './icon-512.png', './icon-maskable.png', './icon-180.png', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
