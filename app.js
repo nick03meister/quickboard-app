@@ -1038,7 +1038,7 @@ let recog=null, listening=false, userStopped=false, voiceFinal='', voiceInterim=
 function voiceUI(on){
   $('voiceBtn').classList.toggle('listening', on);
   $('voiceBar').classList.toggle('hidden', !on);
-  if(on){ $('voiceLive').textContent='Listening… speak now'; $('voiceTimer').textContent='0:00'; }
+  if(on){ $('voiceLive').textContent=(voiceLang()==='hi-IN'?'हिंदी • ':'EN • ')+'Listening… speak now'; $('voiceTimer').textContent='0:00'; }
 }
 function voiceTick(){
   const s=Math.floor((Date.now()-voiceStart)/1000);
@@ -1571,7 +1571,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v71';
+const APP_VER = 'v72';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
