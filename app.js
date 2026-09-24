@@ -1030,7 +1030,9 @@ document.addEventListener('keydown',(e)=>{
   if(e.key==='/'&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){e.preventDefault();$('searchInput').focus();}
   if(e.key==='Escape'){
     if(selectMode){ setSelectMode(false); return; }
-    document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));
+    const cm=$('cardModal');
+    if(cm&&!cm.classList.contains('hidden')) attemptCloseCard();
+    document.querySelectorAll('.modal').forEach(m=>{ if(m.id!=='cardModal') m.classList.add('hidden'); });
   }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); doUndo(); }
 });
@@ -1067,7 +1069,25 @@ $('mBoard').onchange=()=>{
   $('mColumn').innerHTML=nb.columns.map(col=>`<option value="${col.id}">${col.name}</option>`).join('');
   $('mColumn').value=nb.columns.some(x=>x.id===keepCol)?keepCol:(nb.columns[0]?.id||'');
 };
-$('mCancel').onclick=()=>{ calReturn=false; $('cardModal').classList.add('hidden'); };
+$('mCancel').onclick=()=>attemptCloseCard();
+// dirty guard: backdrop click / Cancel / Escape close silently when clean,
+// ask before discarding edits
+function isCardDirty(){
+  const c=state.cards.find(x=>x.id===editingId); if(!c) return false;
+  const tags=$('mTags').value.split(',').map(s=>sanitizeTag(s.trim().replace(/^#/,''))).filter(Boolean);
+  return $('mTitle').value.trim()!==(c.title||'')
+    || $('mDetails').value!==(c.details||'')
+    || tags.join(',')!==(c.tags||[]).join(',')
+    || $('mDue').value!==(c.due||'')
+    || $('mPriority').value!==(c.priority||'')
+    || $('mColumn').value!==c.colId
+    || $('mBoard').value!==c.boardId;
+}
+function attemptCloseCard(){
+  if(isCardDirty() && !confirm('Discard unsaved changes?')) return;
+  calReturn=false; $('cardModal').classList.add('hidden');
+}
+$('cardModal').addEventListener('click',(e)=>{ if(e.target===$('cardModal')) attemptCloseCard(); });
 $('mBackCal').onclick=()=>{ calReturn=false; $('cardModal').classList.add('hidden'); $('calModal').classList.remove('hidden'); renderCal(); };
 $('mSave').onclick=()=>{
   const c=state.cards.find(x=>x.id===editingId); if(!c)return;
@@ -1273,7 +1293,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v63';
+const APP_VER = 'v64';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
