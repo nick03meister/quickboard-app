@@ -480,13 +480,14 @@ function fmtInline(s){
   return s;
 }
 function formatDetails(text){
-  const lines=(text||'').split('\n');
-  let html='', list=null;
+  const lines=(text||'').split(/\r?\n/);
+  let html='', list=null, ln=-1;
   const close=()=>{ if(list){ html+=`</${list}>`; list=null; } };
   for(const line of lines){
+    ln++;
     let m;
     if((m=/^#{1,3}\s+(.*)/.exec(line))){ close(); html+=`<div class="md-h">${fmtInline(m[1])}</div>`; }
-    else if((m=/^\s*[-*]\s+\[([ xX])\]\s+(.*)/.exec(line))){ if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';} html+=`<li class="md-todo${/x/i.test(m[1])?' done':''}">${fmtInline(m[2])}</li>`; }
+    else if((m=/^\s*[-*]\s*\[([ xX])\]\s*(.*)/.exec(line))){ if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';} html+=`<li class="md-todo${/x/i.test(m[1])?' done':''}" data-ln="${ln}">${fmtInline(m[2])}</li>`; }
     else if((m=/^\s*[-*•]\s+(.*)/.exec(line))){ if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';} html+=`<li>${fmtInline(m[1])}</li>`; }
     else if((m=/^\s*\d+[.)]\s+(.*)/.exec(line))){ if(list!=='ol'){close();html+='<ol class="md-list">';list='ol';} html+=`<li>${fmtInline(m[1])}</li>`; }
     else if(/^\s*$/.test(line)){ close(); }
@@ -494,6 +495,16 @@ function formatDetails(text){
   }
   close();
   return html;
+}
+function toggleTodo(cardId, ln){
+  const c=state.cards.find(x=>x.id===cardId); if(!c||!c.details) return;
+  const lines=c.details.split('\n');
+  const line=lines[ln]; if(!line) return;
+  const m=/^(\s*[-*]\s*\[)([ xX])(\]\s*.*)$/.exec(line);
+  if(!m) return;
+  lines[ln]=m[1]+(/[xX]/.test(m[2])?' ':'x')+m[3];
+  c.details=lines.join('\n');
+  save(); render();
 }
 function dueChip(c){
   if(!c.due && !c.time) return '';
@@ -521,7 +532,7 @@ function cardNode(c, board, colIdx){
     el.onclick=(e)=>{ e.stopPropagation(); const ft=$('filterTag'); ft.value=(ft.value===el.dataset.tag)?'':el.dataset.tag; renderBoard(); };
   });
   d.querySelector('.card-title').textContent=c.title;
-  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); }
+  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); box.querySelectorAll('.md-todo').forEach(li=>{ li.title='Tap to tick/untick'; li.onclick=(e)=>{ e.stopPropagation(); if(selectMode) return; toggleTodo(c.id, +li.dataset.ln); }; }); }
   if(selectMode&&selected.has(c.id)) d.classList.add('selected');
   // escape tag chips already safe (tags sanitized lowercase alnum)
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
@@ -1596,7 +1607,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v75';
+const APP_VER = 'v76';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

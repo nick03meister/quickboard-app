@@ -173,7 +173,8 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .card-details .md-h{font-weight:800;color:#1c0a0a;margin:2px 0}
 .card-details ul.md-list,.card-details ol.md-list{margin:2px 0;padding-left:20px}
 .card-details li{margin:1px 0}
-.card-details li.md-todo{list-style:none;margin-left:-20px}
+.card-details li.md-todo{list-style:none;margin-left:-20px;cursor:pointer;border-radius:6px}
+.card-details li.md-todo:hover{background:rgba(218,41,28,.07)}
 .card-details li.md-todo::before{content:'☐ ';color:#b81d12}
 .card-details li.md-todo.done{color:#8a8a8a;text-decoration:line-through}
 .card-details li.md-todo.done::before{content:'☑ '}
