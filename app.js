@@ -1188,6 +1188,108 @@ $('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
 $('calNext').onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
 $('calTodayBtn').onclick=()=>{ const t=new Date(); calY=t.getFullYear(); calM=t.getMonth(); calSel=todayStr(); renderCal(); };
 
+/* ——— Google Calendar → cards (OAuth in-browser, no backend) ——— */
+const GCAL_KEY='quickboard.gcal.v1';
+function getGcal(){ try{ return JSON.parse(localStorage.getItem(GCAL_KEY)||'{}'); }catch{ return {}; } }
+function setGcal(patch){ try{ localStorage.setItem(GCAL_KEY, JSON.stringify({...getGcal(),...patch})); }catch{} }
+let gcalToken=null, gcalTokenExp=0;
+function gcalCfg(){ const c=getGcal(); return {clientId:c.clientId||'', calendarId:c.calendarId||'primary', boardId:c.boardId||'', auto:!!c.auto}; }
+function loadGis(cb){
+  if(window.google&&google.accounts&&google.accounts.oauth2){ cb&&cb(); return; }
+  const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client';
+  s.onload=()=>cb&&cb(); s.onerror=()=>toast('Google auth failed to load — check connection');
+  document.head.appendChild(s);
+}
+// interactive=true pops the consent chooser; false tries silent (boot sync)
+function gcalEnsureToken(interactive,cb){
+  if(gcalToken && Date.now()<gcalTokenExp-60000){ cb&&cb(gcalToken); return; }
+  const {clientId}=gcalCfg();
+  if(!clientId){ if(interactive) toast('Paste your Google Client ID first (see steps above)'); return; }
+  loadGis(()=>{
+    try{
+      const tc=google.accounts.oauth2.initTokenClient({
+        client_id:clientId, scope:'https://www.googleapis.com/auth/calendar.readonly',
+        callback:(r)=>{ if(r&&r.access_token){ gcalToken=r.access_token; gcalTokenExp=Date.now()+(+r.expires_in||3600)*1000; renderGcalBox(); cb&&cb(gcalToken); } else if(interactive) toast('Google sign-in cancelled'); renderGcalBox(); }
+      });
+      tc.requestAccessToken({prompt:interactive?'consent':''});
+    }catch{ if(interactive) toast('Google sign-in failed'); }
+  });
+}
+async function gcalFetch(path,token){
+  const r=await fetch('https://www.googleapis.com/calendar/v3'+path,{headers:{Authorization:'Bearer '+token}});
+  if(r.status===401){ gcalToken=null; gcalTokenExp=0; throw new Error('auth'); }
+  if(!r.ok) throw new Error('api '+r.status);
+  return r.json();
+}
+function gcalSync(manual){
+  const cfg=gcalCfg();
+  if(!cfg.clientId){ if(manual) toast('Add your Google Client ID in Sync settings first'); return; }
+  gcalEnsureToken(false, async (tok)=>{
+    try{
+      const tmax=new Date(Date.now()+30*864e5);
+      const data=await gcalFetch(`/calendars/${encodeURIComponent(cfg.calendarId)}/events?singleEvents=true&orderBy=startTime&timeMin=${new Date().toISOString()}&timeMax=${tmax.toISOString()}&maxResults=100`, tok);
+      const items=(data.items||[]).filter(e=>e.status!=='cancelled');
+      const board=state.boards.find(b=>b.id===cfg.boardId)||state.boards.find(b=>/meeting/i.test(b.name))||fallbackBoard();
+      if(!board) return;
+      const inbox=board.columns[0];
+      const map=getGcal().map||{};
+      let added=0, updated=0;
+      items.forEach(ev=>{
+        const start=ev.start?.dateTime||ev.start?.date||'';
+        const m=start.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+        if(!m) return;
+        const due=`${m[1]}-${m[2]}-${m[3]}`, time=m[4]?`${m[4]}:${m[5]}`:'';
+        const title=(ev.summary||'Untitled event').slice(0,200);
+        const loc=ev.location?`\nWhere: ${ev.location}`:'';
+        const meet=ev.hangoutLink?`\nJoin: ${ev.hangoutLink}`:'';
+        const desc=(ev.description||'').replace(/<[^>]+>/g,'').trim().slice(0,500);
+        const details=`${title}\n${due}${time?' · '+time:''}${loc}${meet}${desc?'\n\n'+desc:''}`.slice(0,2000);
+        const ex=map[ev.id]&&state.cards.find(c=>c.id===map[ev.id]);
+        if(ex){
+          if(ex.title!==title||ex.due!==due||(ex.time||'')!==time){ ex.title=title; ex.due=due; ex.time=time; ex.details=details; updated++; }
+        }else{
+          if(state.cards.some(c=>c.boardId===board.id&&c.title===title&&c.due===due)) return; // same event re-made elsewhere — no dupe
+          state.cards.unshift({id:uid(),boardId:board.id,colId:inbox.id,title,details,tags:['gcal'],priority:'',due,time,createdAt:Date.now()});
+          map[ev.id]=state.cards[0].id; added++;
+        }
+      });
+      setGcal({map,lastSync:Date.now()});
+      if(added||updated){ save(); render(); }
+      renderGcalBox();
+      if(manual) toast(added||updated?`Calendar: ${added} new, ${updated} updated ✓`:'Calendar up to date ✓');
+      else if(added||updated) toast(`Calendar: ${added} new ✓`);
+    }catch(e){ renderGcalBox(); if(manual) toast('Calendar sync failed — tap Connect Google'); }
+  });
+}
+function gcalLoadCals(){
+  gcalEnsureToken(true, async (tok)=>{
+    try{
+      const d=await gcalFetch('/users/me/calendarList?maxResults=50', tok);
+      const sel=$('gcalCal'); const cur=gcalCfg().calendarId;
+      sel.innerHTML='';
+      (d.items||[]).forEach(c=>{
+        const o=document.createElement('option'); o.value=c.id; o.textContent=c.summary||c.id; sel.appendChild(o);
+      });
+      if((d.items||[]).some(c=>c.id===cur)) sel.value=cur;
+      setGcal({calendarId:sel.value,connected:true}); renderGcalBox();
+      toast('Google connected ✓ — pick a calendar, then Sync now');
+    }catch(e){ toast('Could not list calendars'); }
+  });
+}
+function renderGcalBox(){
+  if(!$('gcalClient')) return;
+  const cfg=gcalCfg();
+  if(document.activeElement!==$('gcalClient')) $('gcalClient').value=cfg.clientId||'';
+  const bs=$('gcalBoard');
+  if(bs){ const cur=cfg.boardId; bs.innerHTML=state.boards.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+    bs.value=state.boards.some(b=>b.id===cur)?cur:((state.boards.find(b=>/meeting/i.test(b.name))||fallbackBoard()||{}).id||''); }
+  const live=gcalToken&&Date.now()<gcalTokenExp-60000;
+  const last=getGcal().lastSync;
+  $('gcalStatus').textContent = live?('Connected ✓'+(last?(' • synced '+new Date(last).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})):''))
+    : (cfg.clientId?'Not connected — tap Connect Google':'Add a Client ID to begin');
+  if($('gcalAuto')) $('gcalAuto').checked=cfg.auto;
+}
+
 // --- import / export ---
 $('importBtn').onclick=()=>{
   $('importBoard').innerHTML=state.boards.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
@@ -1300,8 +1402,14 @@ $('forcePullBtn').onclick=()=>{
 $('settingsBtn').onclick=()=>{
   const eff = getEffectiveCfg();
   $('firebaseConfig').value = localStorage.getItem(FB_CFG_KEY) || (eff.fromFile ? JSON.stringify(eff.cfg, null, 2) : '');
-  $('settingsModal').classList.remove('hidden'); updateSyncStatus(); renderBackups(); renderPresetsMgr();
+  $('settingsModal').classList.remove('hidden'); updateSyncStatus(); renderBackups(); renderPresetsMgr(); renderGcalBox();
 };
+$('gcalConnect').onclick=()=>{ const v=$('gcalClient').value.trim(); if(!v){ toast('Paste the Client ID first'); return; } setGcal({clientId:v,connected:false}); gcalLoadCals(); };
+$('gcalClient').addEventListener('change',()=>{ const v=$('gcalClient').value.trim(); if(v&&v!==gcalCfg().clientId) setGcal({clientId:v,connected:false}); renderGcalBox(); });
+$('gcalCal').onchange=()=>setGcal({calendarId:$('gcalCal').value});
+$('gcalBoard').onchange=()=>setGcal({boardId:$('gcalBoard').value});
+$('gcalAuto').onchange=()=>setGcal({auto:$('gcalAuto').checked});
+$('gcalSyncNow').onclick=()=>gcalSync(true);
 $('settingsClose').onclick=()=>$('settingsModal').classList.add('hidden');
 $('credsDismiss').onclick=()=>{localStorage.setItem(CREDS_DISMISS,'1');updateCredsBanner();};
 $('wipeBtn').onclick=()=>askDanger({
@@ -1329,7 +1437,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v65';
+const APP_VER = 'v66';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1557,6 +1665,7 @@ try{
   initCloud();
   loadUnited();
   dailySnap();
+  setTimeout(()=>{ try{ if(getGcal().auto&&getGcal().clientId) gcalSync(false); }catch{} },4000);
 }catch(err){
   try{ document.getElementById('statsLine').textContent='Startup failed: '+((err&&err.message)||err); }catch(_){}
   console.error(err);
