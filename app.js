@@ -404,6 +404,33 @@ function renderTabs(){
     }
     tabsEl.appendChild(btn);
   });
+  if(state.activeBoardId!==lastTabBoard){
+    lastTabBoard=state.activeBoardId;
+    const act=tabsEl.querySelector('.board-tab.active');
+    if(act) try{ act.scrollIntoView({inline:'center',block:'nearest'}); }catch{}
+  }
+}
+let lastTabBoard=null;
+function colMenu(anchor, items){
+  document.querySelectorAll('.colmenu').forEach(m=>m.remove());
+  const m=document.createElement('div'); m.className='colmenu';
+  items.forEach(it=>{
+    const b=document.createElement('button'); b.textContent=it.label; if(it.danger)b.classList.add('del');
+    b.onclick=(e)=>{ e.stopPropagation(); closeMenu(); it.fn(); };
+    m.appendChild(b);
+  });
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect();
+  m.style.top=Math.min(r.bottom+6, window.innerHeight-m.offsetHeight-10)+'px';
+  m.style.left=Math.max(10, Math.min(r.right-200, window.innerWidth-210))+'px';
+  function closeMenu(){ m.remove(); document.removeEventListener('pointerdown', onDoc, true); window.removeEventListener('resize', closeMenu); window.removeEventListener('scroll', closeMenu, true); document.removeEventListener('keydown', onKey); }
+  function onDoc(e){ if(!m.contains(e.target) && e.target!==anchor) closeMenu(); }
+  function onKey(e){ if(e.key==='Escape') closeMenu(); }
+  document.addEventListener('pointerdown', onDoc, true);
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('resize', closeMenu);
+  window.addEventListener('scroll', closeMenu, true);
+  m._close=closeMenu;
 }
 function currentFilters(){
   return { q: $('searchInput').value.trim().toLowerCase(), tag: $('filterTag').value, pri: $('filterPriority').value, due: $('filterDue').value };
@@ -438,9 +465,9 @@ function renderAllBoard(){
       const rc=realColFor(c.boardId,name); if(!rc||c.colId!==rc.id) return false;
       return cardMatches(c,f);
     }).sort((a,c2)=>((a.due||'9999')+(a.time||''))<((c2.due||'9999')+(c2.time||''))?-1:1);
-    colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span><span class="col-actions"><button class="mini" data-act="sel" title="Select multiple cards">Select</button></span></div><div class="cards"></div><button class="add-inline">+ Add card</button>`;
+    colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span><span class="col-actions"><button class="mini" data-act="menu" title="Column options">⋯</button></span></div><div class="cards"></div><button class="add-inline">+ Add card</button>`;
     colDiv.querySelector('.col-name').textContent=name;
-    colDiv.querySelector('[data-act="sel"]').onclick=()=>setSelectMode(true);
+    colDiv.querySelector('[data-act="menu"]').onclick=(e)=>{ e.stopPropagation(); colMenu(e.currentTarget,[{label:'Select cards',fn:()=>setSelectMode(true)}]); };
     colDiv.querySelector('.add-inline').onclick=()=>{
       const fb=fallbackBoard();
       const t=prompt(`New card in column "${name}" (use @Board to route, else ${fb?.name}):`); if(!t||!t.trim())return;
@@ -478,20 +505,20 @@ function renderBoard(){
     const cards = state.cards.filter(c=>c.boardId===b.id && c.colId===col.id && cardMatches(c,f))
       .sort((a,c2)=>((a.due||'9999')+(a.time||''))<((c2.due||'9999')+(c2.time||''))?-1:1);
     colDiv.innerHTML = `<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span>
-      <span class="col-actions"><button class="mini" data-act="sel" title="Select multiple cards">Select</button><button class="mini" data-act="rename" title="Rename this column">✏️</button><button class="mini del" data-act="del" title="Delete this entire COLUMN (cards move to first column)">Column 🗑️</button></span></div>
+      <span class="col-actions"><button class="mini" data-act="menu" title="Column options">⋯</button></span></div>
       <div class="cards"></div><button class="add-inline">+ Add card</button>`;
     colDiv.querySelector('.col-name').textContent = col.name;
-    colDiv.querySelector('[data-act="sel"]').onclick=()=>setSelectMode(true);
-    colDiv.querySelector('[data-act="rename"]').onclick=()=>{
-      const nn=prompt('Rename column:',col.name); if(nn&&nn.trim()){col.name=nn.trim().slice(0,30);save();render();}
-    };
-    colDiv.querySelector('[data-act="del"]').onclick=()=>{
-      if(b.columns.length<=1){alert('Keep at least 1 column');return;}
-      if(!confirm(`Delete column "${col.name}"? Cards move to first column.`))return;
-      const first=b.columns[0].id;
-      state.cards.forEach(c=>{if(c.boardId===b.id&&c.colId===col.id)c.colId=first;});
-      b.columns=b.columns.filter(x=>x.id!==col.id); save(); render();
-    };
+    colDiv.querySelector('[data-act="menu"]').onclick=(e)=>{ e.stopPropagation(); colMenu(e.currentTarget,[
+      {label:'Select cards', fn:()=>setSelectMode(true)},
+      {label:'Rename column', fn:()=>{ const nn=prompt('Rename column:',col.name); if(nn&&nn.trim()){col.name=nn.trim().slice(0,30);save();render();} }},
+      {label:'Delete column', danger:true, fn:()=>{
+        if(b.columns.length<=1){alert('Keep at least 1 column');return;}
+        if(!confirm(`Delete column "${col.name}"? Cards move to first column.`))return;
+        const first=b.columns[0].id;
+        state.cards.forEach(c=>{if(c.boardId===b.id&&c.colId===col.id)c.colId=first;});
+        b.columns=b.columns.filter(x=>x.id!==col.id); save(); render();
+      }}
+    ]); };
     colDiv.querySelector('.add-inline').onclick=()=>{
       const t=prompt(`New card in ${b.name} → ${col.name}:`); if(!t||!t.trim())return;
       const p=parseQuick(t.trim(),{priority:'med'});
@@ -533,6 +560,10 @@ function fmtInline(s){
   s = s.replace(/~~([^~]+)~~/g,'<del>$1</del>');
   s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<em>$2</em>');
   s = s.replace(/(^|[\s(>])(https?:\/\/[^\s<)]+)/g,'$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+  // phone numbers (dial-ins): linkify outside existing anchors only
+  s = s.split(/(<a\b[^>]*>.*?<\/a>)/g).map((seg,i)=> i%2 ? seg :
+    seg.replace(/(^|[\s(:])(\+[\d][\d\s().-]{5,}\d)/g, (m,pre,num)=>`${pre}<a href="tel:+${num.replace(/\D/g,'')}" title="Tap to call">${num}</a>`)
+  ).join('');
   return s;
 }
 function formatDetails(text, cardId){
@@ -1719,7 +1750,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v88';
+const APP_VER = 'v89';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1862,6 +1893,8 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='visible' && window._qbDb){ listenCloud(); pullFromCloud(true); }
 });
 window.addEventListener('online', ()=>{ listenCloud(); pullFromCloud(true); });
+// collapse header rows on scroll (mobile): brand + filters + tools hide, search stays
+window.addEventListener('scroll',()=>{ document.body.classList.toggle('hd-compact',(window.scrollY||0)>110); },{passive:true});
 window.addEventListener('focus', ()=>{ if(window._qbDb) pullFromCloud(true); });
 /* ——— Manchester United fixtures (live via OpenLigaDB, free, no key) ——— */
 const UTD_API = 'https://api.openligadb.de/getmatchdata/pl/2026';

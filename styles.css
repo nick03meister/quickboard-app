@@ -493,3 +493,16 @@ body:has(#quickadd:not(.hidden)) .fab,body:has(.modal:not(.hidden)) .fab,body:ha
 .cal-day-cell.sel .cal-dot.done{background:#16a34a}
 .cal-dot.done{background:#16a34a}
 .cal-tick{color:#16a34a;font-weight:900;flex:0 0 auto}
+/* v89: column options menu */
+.colmenu{position:fixed;z-index:90;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(28,10,10,.2);min-width:190px;max-width:240px;overflow:hidden;padding:6px}
+.colmenu button{display:block;width:100%;text-align:left;border:none;background:transparent;padding:11px 14px;font-size:14px;font-weight:600;color:#1c0a0a;cursor:pointer;border-radius:9px}
+.colmenu button:hover{background:rgba(218,41,28,.08)}
+.colmenu button.del{color:#b91c1c}
+/* v89: collapsible header + condensed actions + FAB clearance (mobile) */
+@media (max-width:820px){
+  .topbar{transition:padding .2s ease}
+  body.hd-compact .brand,body.hd-compact .ta-filters,body.hd-compact .ta-more{display:none}
+  body.hd-compact .topbar{padding-top:calc(6px + env(safe-area-inset-top));padding-bottom:8px}
+  .card-foot [data-a="right"]{display:none}
+  .board{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
+}
