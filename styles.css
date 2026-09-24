@@ -93,10 +93,12 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe 
 .tok button:hover{opacity:1}
 .tok.ghost{background:none;border:1px dashed var(--line);color:#8a6d6d;cursor:default;font-weight:600}
 .cmp-controls{display:flex;flex-wrap:wrap;gap:8px;padding:10px 18px;border-top:1px solid var(--line);align-items:center}
-.cmp-field{display:inline-flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid transparent;border-radius:10px;padding:0 10px;height:36px;font-size:14px;font-weight:600;color:#1c0a0a}
+.cmp-field{display:inline-flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid transparent;border-radius:10px;padding:0 10px;height:38px;font-size:14px;font-weight:600;color:#1c0a0a;max-width:100%}
 .cmp-field:hover{border-color:var(--line)}
-.cmp-field select,.cmp-field input{border:0;background:none;outline:0;font-weight:600;height:100%;font-size:14px;color:#1c0a0a;font-family:inherit}
-.cmp-field input[type=date]{width:122px}
+.cmp-field select,.cmp-field input{border:0;background:none;outline:0;font-weight:600;height:38px;line-height:38px;font-size:14px;color:#1c0a0a;font-family:inherit;padding:0}
+.cmp-field select{max-width:170px}
+.cmp-field input[type=date]{min-width:132px;width:auto}
+.cmp-field input[type=time]{min-width:102px;width:auto}
 .cmp-sep{color:#b8b2ab;font-weight:700}
 .cmp-prio{display:inline-flex;gap:2px;background:#f8fafc;border-radius:10px;padding:3px}
 .cmp-prio button{border:0;background:none;border-radius:8px;height:30px;padding:0 10px;font-size:13.5px;font-weight:700;color:#8a6d6d;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
