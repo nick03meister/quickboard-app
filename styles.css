@@ -134,7 +134,9 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .card-details code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:12px}
 .card-details a{color:#b81d12;font-weight:600}
 .md-bar{display:flex;gap:6px;margin:4px 0 8px;flex-wrap:wrap}
-.md-bar button{font-size:12.5px;border:1px solid var(--line);background:#f8fafc;border-radius:9px;padding:5px 11px;cursor:pointer;color:#1c0a0a}
+.md-bar button{font-size:13px;font-weight:700;min-width:36px;border:1px solid var(--line);background:#f8fafc;border-radius:9px;padding:5px 10px;cursor:pointer;color:#1c0a0a}
+.md-bar button .u{text-decoration:underline}
+.md-bar button .s{text-decoration:line-through}
 .md-bar button:hover{border-color:var(--united);color:#b81d12}
 .md-bar button:active{transform:scale(.96)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}

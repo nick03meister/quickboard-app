@@ -469,9 +469,12 @@ function escapeHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 function fmtInline(s){
   s = escapeHtml(s);
   s = s.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
   s = s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  s = s.replace(/__([^_]+)__/g,'<u>$1</u>');
+  s = s.replace(/~~([^~]+)~~/g,'<del>$1</del>');
   s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<em>$2</em>');
-  s = s.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  s = s.replace(/(^|[\s(>])(https?:\/\/[^\s<)]+)/g,'$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   return s;
 }
 function formatDetails(text){
@@ -797,11 +800,19 @@ function mdApply(mode){
   let s=ta.selectionStart??0, e=ta.selectionEnd??0;
   if(s>e){ const t=s; s=e; e=t; }
   const v=ta.value;
-  if(mode==='bold'||mode==='italic'){
+  if(mode==='bold'||mode==='italic'||mode==='underline'||mode==='strike'){
     const sel=v.slice(s,e)||'text';
-    const mark=mode==='bold'?'**':'*';
+    const mark=mode==='bold'?'**':mode==='italic'?'*':mode==='underline'?'__':'~~';
     ta.value=v.slice(0,s)+mark+sel+mark+v.slice(e);
     ta.focus(); ta.setSelectionRange(s+mark.length, s+mark.length+sel.length);
+  } else if(mode==='link'){
+    const sel=v.slice(s,e);
+    let url='', label=sel||'link';
+    if(/^https?:\/\/\S+$/i.test(sel)){ url=sel; label=sel; }
+    else { url=prompt('Link URL (https://…):','https://')||''; if(!url||!/^https?:\/\//i.test(url)){ ta.focus(); return; } }
+    const out=`[${label}](${url})`;
+    ta.value=v.slice(0,s)+out+v.slice(e);
+    ta.focus(); ta.setSelectionRange(s,s+out.length);
   } else {
     const ls=v.lastIndexOf('\n',s-1)+1;
     let le=v.indexOf('\n',e); if(le<0) le=v.length;
@@ -1496,7 +1507,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v68';
+const APP_VER = 'v69';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
