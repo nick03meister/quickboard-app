@@ -1048,6 +1048,7 @@ function voiceTick(){
 const VOICE_LANG_KEY='quickboard.voice.lang';
 function voiceLang(){ try{ return localStorage.getItem(VOICE_LANG_KEY)||'en-US'; }catch{ return 'en-US'; } }
 (function initVoiceLang(){
+  try{ if(localStorage.getItem('qb.voice.defv')!=='2'){ localStorage.setItem(VOICE_LANG_KEY,'en-US'); localStorage.setItem('qb.voice.defv','2'); } }catch{} // one-time reset: EN default everywhere
   const w=$('voiceLang'); if(!w) return;
   const cur=voiceLang();
   w.querySelectorAll('button').forEach(b=>{
@@ -1571,7 +1572,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v72';
+const APP_VER = 'v73';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
