@@ -9,12 +9,12 @@
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icon-192.png" />
 <link rel="apple-touch-icon" href="./icon-180.png" />
-<link rel="stylesheet" href="./styles.css?v=67" />
+<link rel="stylesheet" href="./styles.css?v=68" />
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo"><img src="./manutd-crest.webp?v=67" alt="Manchester United" /></div>
+    <div class="logo"><img src="./manutd-crest.webp?v=68" alt="Manchester United" /></div>
     <div>
       <div class="brand-title">QuickBoard</div>
       <div class="brand-sub">daily capture • kanban</div>
@@ -39,7 +39,7 @@
       <option value="nodate">No date</option>
     </select>
     <button id="calBtn" class="btn ghost icon-only" title="Calendar view">📅</button>
-    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=67" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
+    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=68" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
     <button id="undoBtn" class="btn ghost icon-only" title="Undo last change (Ctrl+Z)" disabled>↩</button>
     <button id="selectBtn" class="btn ghost" title="Select multiple cards to delete">Select</button>
     <button id="syncNowBtn" class="btn ghost icon-only" title="Pull latest from cloud now">⟳</button>
@@ -88,7 +88,7 @@
 </section>
 
 <section id="unitedBar" class="united-bar">
-  <div class="united-badge"><img src="./manutd-crest.webp?v=67" alt="MUFC" /></div>
+  <div class="united-badge"><img src="./manutd-crest.webp?v=68" alt="MUFC" /></div>
   <div class="united-next" id="unitedNext">Loading United fixtures…</div>
   <div class="united-count" id="unitedCount"></div>
   <div class="united-list" id="unitedList"></div>
@@ -100,7 +100,7 @@
 <footer class="footer">
   <span id="statsLine">—</span>
   <span class="dot">•</span>
-  <span id="verLine">v67 • checking sync…</span>
+  <span id="verLine">v68 • checking sync…</span>
   <span class="dot">•</span>
   <span>Add to Home Screen on Samsung for app mode</span>
 </footer>
@@ -110,7 +110,14 @@
   <div class="modal-card">
     <h3 id="modalTitle">Edit card</h3>
     <label>Title<input id="mTitle" type="text" /></label>
-    <label>Details <button id="mAutofill" type="button" class="btn small" style="margin-left:8px" title="Detect date, time & meeting from the text above">✨ Detect date & meeting</button><textarea id="mDetails" rows="5" placeholder="quick notes, onboarding steps, credential hints…"></textarea></label>
+    <label>Details <button id="mAutofill" type="button" class="btn small" style="margin-left:8px" title="Detect date, time & meeting from the text above">✨ Detect date & meeting</button><textarea id="mDetails" rows="5" placeholder="quick notes… **bold**, *italic*, - bullets, 1. numbered, - [ ] todo"></textarea></label>
+    <div class="md-bar" role="toolbar" aria-label="Text formatting">
+      <button type="button" data-md="bold" title="Bold — **text**"><b>B</b></button>
+      <button type="button" data-md="italic" title="Italic — *text*"><i>I</i></button>
+      <button type="button" data-md="bullets" title="Bullet list — start lines with - ">• list</button>
+      <button type="button" data-md="numbered" title="Numbered list — 1. 2. 3.">1. list</button>
+      <button type="button" data-md="todo" title="Checklist — - [ ] item">☑ todo</button>
+    </div>
     <div class="grid2">
       <label class="span2">Tags (comma)<input id="mTags" type="text" placeholder="work, urgent" /><div id="mPresetChips" class="smart-tags" style="margin-top:6px"></div></label>
     </div>
@@ -265,8 +272,8 @@
   <button id="selDoneBtn" class="mini" title="Exit select mode">Done</button>
 </div>
 
-<script src="./firebase-config.js?v=67"></script>
-<script src="./app.js?v=67"></script>
+<script src="./firebase-config.js?v=68"></script>
+<script src="./app.js?v=68"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -464,6 +464,32 @@ function renderBoard(){
   boardEl.appendChild(addCol);
 }
 function fmtDate(iso){ const m=/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(iso||''); return m?`${m[3]}-${m[2]}-${m[1]}`:(iso||''); }
+/* ——— tiny markdown for card details (stored plain, rendered safe) ——— */
+function escapeHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtInline(s){
+  s = escapeHtml(s);
+  s = s.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g,'$1<em>$2</em>');
+  s = s.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function formatDetails(text){
+  const lines=(text||'').split('\n');
+  let html='', list=null;
+  const close=()=>{ if(list){ html+=`</${list}>`; list=null; } };
+  for(const line of lines){
+    let m;
+    if((m=/^#{1,3}\s+(.*)/.exec(line))){ close(); html+=`<div class="md-h">${fmtInline(m[1])}</div>`; }
+    else if((m=/^\s*[-*]\s+\[([ xX])\]\s+(.*)/.exec(line))){ if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';} html+=`<li class="md-todo${/x/i.test(m[1])?' done':''}">${fmtInline(m[2])}</li>`; }
+    else if((m=/^\s*[-*•]\s+(.*)/.exec(line))){ if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';} html+=`<li>${fmtInline(m[1])}</li>`; }
+    else if((m=/^\s*\d+[.)]\s+(.*)/.exec(line))){ if(list!=='ol'){close();html+='<ol class="md-list">';list='ol';} html+=`<li>${fmtInline(m[1])}</li>`; }
+    else if(/^\s*$/.test(line)){ close(); }
+    else { close(); html+=`<div class="md-p">${fmtInline(line)}</div>`; }
+  }
+  close();
+  return html;
+}
 function dueChip(c){
   if(!c.due && !c.time) return '';
   const when=[c.due?fmtDate(c.due):'',c.time||''].filter(Boolean).join(' · ');
@@ -487,7 +513,7 @@ function cardNode(c, board, colIdx){
     el.onclick=(e)=>{ e.stopPropagation(); const ft=$('filterTag'); ft.value=(ft.value===el.dataset.tag)?'':el.dataset.tag; renderBoard(); };
   });
   d.querySelector('.card-title').textContent=c.title;
-  if(c.details) d.querySelector('.card-details').textContent=c.details;
+  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); }
   if(selectMode&&selected.has(c.id)) d.classList.add('selected');
   // escape tag chips already safe (tags sanitized lowercase alnum)
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
@@ -765,6 +791,34 @@ function autoDetectModal(){
   renderMPresets();
 }
 $('mDetails').addEventListener('input',()=>{ clearTimeout(mDetectT); mDetectT=setTimeout(autoDetectModal,700); });
+/* markdown toolbar: wrap selection or prefix selected lines */
+function mdApply(mode){
+  const ta=$('mDetails');
+  let s=ta.selectionStart??0, e=ta.selectionEnd??0;
+  if(s>e){ const t=s; s=e; e=t; }
+  const v=ta.value;
+  if(mode==='bold'||mode==='italic'){
+    const sel=v.slice(s,e)||'text';
+    const mark=mode==='bold'?'**':'*';
+    ta.value=v.slice(0,s)+mark+sel+mark+v.slice(e);
+    ta.focus(); ta.setSelectionRange(s+mark.length, s+mark.length+sel.length);
+  } else {
+    const ls=v.lastIndexOf('\n',s-1)+1;
+    let le=v.indexOf('\n',e); if(le<0) le=v.length;
+    const block=v.slice(ls,le).split('\n');
+    const pre=block.map((ln,i)=>{
+      const t=ln.replace(/^(\s*)(?:[-*•]\s+|\d+[.)]\s+|-\s+\[[ xX]\]\s+)?/,'$1');
+      if(mode==='bullets') return t.replace(/^(\s*)/,'$1- ');
+      if(mode==='numbered') return t.replace(/^(\s*)/,'$1'+(i+1)+'. ');
+      return t.replace(/^(\s*)/,'$1- [ ] ');
+    });
+    ta.value=v.slice(0,ls)+pre.join('\n')+v.slice(le);
+    ta.focus();
+    const np=ls+pre.join('\n').length; ta.setSelectionRange(np,np);
+  }
+  ta.dispatchEvent(new Event('input',{bubbles:true}));
+}
+document.querySelectorAll('#cardModal .md-bar button').forEach(b=>{ b.onclick=()=>mdApply(b.dataset.md); });
 $('mAutofill').onclick=()=>{
   const r=detectMeeting($('mDetails').value);
   if(!r.due&&!r.isMeeting){ alert('No date or meeting found in the details.'); return; }
@@ -1442,7 +1496,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v67';
+const APP_VER = 'v68';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
