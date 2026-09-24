@@ -1436,7 +1436,7 @@ function renderCal(){
     const items=map[iso]||[];
     const e=document.createElement('div');
     e.className='cal-day-cell'+(iso===today?' today':'')+(iso===calSel?' sel':'');
-    e.innerHTML=`<b>${d}</b>`+(items.length?`<span class="cal-dots">${items.slice(0,3).map(()=>`<span class="cal-dot${isOverdue(iso)?' over':''}"></span>`).join('')}</span><small>${items.length}</small>`:'');
+    e.innerHTML=`<b>${d}</b>`+(items.length?`<span class="cal-dots">${items.slice(0,3).map(c=>{ const b=state.boards.find(x=>x.id===c.boardId); const done=b&&b.columns.length&&b.columns[b.columns.length-1].id===c.colId; return `<span class="cal-dot${done?' done':isOverdue(iso)?' over':''}"></span>`; }).join('')}</span><small>${items.length}</small>`:'');
     e.onclick=()=>{ calSel=iso; renderCal(); };
     g.appendChild(e);
   }
@@ -1445,8 +1445,9 @@ function renderCal(){
   if(!items.length){ list.innerHTML='<span class="muted">No cards due this day.</span>'; return; }
   items.forEach(c=>{
     const b=state.boards.find(x=>x.id===c.boardId);
+    const done=b&&b.columns.length&&b.columns[b.columns.length-1].id===c.colId;
     const row=document.createElement('div'); row.className='cal-item';
-    row.innerHTML=`<span class="cal-item-tm"></span><span class="cal-item-t"></span><span class="cal-item-b"></span>`;
+    row.innerHTML=`${done?'<span class="cal-tick">✓</span>':''}<span class="cal-item-tm"></span><span class="cal-item-t"></span><span class="cal-item-b"></span>`;
     row.children[0].textContent=c.time||'––:––';
     row.children[1].textContent=c.title;
     row.children[2].textContent=(b?b.name:'?')+(isOverdue(c.due)?' • overdue':'');
@@ -1717,7 +1718,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v82';
+const APP_VER = 'v83';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

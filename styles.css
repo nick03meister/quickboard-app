@@ -314,7 +314,10 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .cal-dots{display:flex;gap:2px}
 .cal-dot{width:6px;height:6px;border-radius:50%;background:var(--gold)}
 .cal-day-cell.sel .cal-dot{background:#fff}
+.cal-day-cell.sel .cal-dot.done{background:#16a34a}
 .cal-dot.over{background:#ef4444}
+.cal-dot.done{background:#16a34a}
+.cal-tick{color:#16a34a;font-weight:900;flex:0 0 auto}
 .cal-day{margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:30vh;overflow:auto}
 .cal-item{display:flex;gap:8px;align-items:baseline;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;font-size:13px}
 .cal-item-t{font-weight:700}
