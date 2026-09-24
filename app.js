@@ -624,7 +624,7 @@ function takeSnapshot(reason){
   try{
     const snaps=getSnaps();
     snaps.unshift({ts:Date.now(), reason, boards:state.boards.length, cards:state.cards.length, state});
-    localStorage.setItem(SNAP_KEY, JSON.stringify(snaps.slice(0,5)));
+    localStorage.setItem(SNAP_KEY, JSON.stringify(snaps.slice(0,10)));
   }catch{}
   renderBackups();
 }
@@ -1418,7 +1418,12 @@ $('wipeBtn').onclick=()=>askDanger({
   word:'RESET', goLabel:'Reset everything',
   action:()=>{ takeSnapshot('pre-wipe'); state=defaultState(); save(); render(); renderBackups(); }
 });
-$('seedBtn').onclick=()=>{ takeSnapshot('pre-seed'); state=defaultState(); save(); render(); renderBackups(); };
+$('seedBtn').onclick=()=>askDanger({
+  title:'Replace everything with demo boards?',
+  desc:'This replaces ALL boards and cards on this device with the demo set. A safety backup is saved first — restore it from the list below if this was a mistake.',
+  word:'SEED', goLabel:'Replace with demo',
+  action:()=>{ takeSnapshot('pre-seed'); state=defaultState(); save(); render(); renderBackups(); }
+});
 $('saveFirebase').onclick=()=>{
   const v=$('firebaseConfig').value.trim();
   if(!v){alert('Paste Firebase config JSON first. Firebase Console → Project Settings → General → Your apps → Config.');return;}
@@ -1437,7 +1442,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v66';
+const APP_VER = 'v67';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
