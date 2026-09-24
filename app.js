@@ -1026,6 +1026,26 @@ $('quickTag').onchange=()=>{
 $('quickDue').onchange=()=>{ renderQaTokens(); };
 $('qaTime').onchange=()=>{ renderQaTokens(); };
 $('quickInput').addEventListener('input',()=>{ renderQaTokens(); });
+$('quickInput').addEventListener('paste',(e)=>{
+  const t=(e.clipboardData||window.clipboardData)?.getData('text')||'';
+  if(!t.includes('\n')) return; // single line: default paste
+  e.preventDefault();
+  const lines=t.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!lines.length) return;
+  const titleEl=$('quickInput'), notesEl=$('qaNotes');
+  if(!titleEl.value.trim()){
+    const title=pickTitle(lines); // smart: event line, not stub/date/link lines
+    titleEl.value=title;
+    const ti=lines.indexOf(title);
+    const rest=(ti>=0?[...lines.slice(0,ti),...lines.slice(ti+1)]:lines).join('\n');
+    notesEl.value=(notesEl.value?notesEl.value.replace(/\s+$/,'')+'\n':'')+rest;
+  } else {
+    titleEl.value=(titleEl.value.replace(/\s+$/,'')+' '+lines[0]).replace(/\s{2,}/g,' ');
+    notesEl.value=(notesEl.value?notesEl.value.replace(/\s+$/,'')+'\n':'')+lines.slice(1).join('\n');
+  }
+  notesEl.style.height='auto'; notesEl.style.height=Math.min(notesEl.scrollHeight,160)+'px';
+  renderQaTokens();
+});
 $('qaNotes').addEventListener('input',()=>{ const n=$('qaNotes'); n.style.height='auto'; n.style.height=Math.min(n.scrollHeight,160)+'px'; renderQaTokens(); });
 function resetComposer(){
   const e=qaEls();
@@ -1572,7 +1592,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v73';
+const APP_VER = 'v74';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
