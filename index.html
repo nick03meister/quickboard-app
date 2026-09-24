@@ -9,12 +9,12 @@
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icon-192.png" />
 <link rel="apple-touch-icon" href="./icon-180.png" />
-<link rel="stylesheet" href="./styles.css?v=69" />
+<link rel="stylesheet" href="./styles.css?v=70" />
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo"><img src="./manutd-crest.webp?v=69" alt="Manchester United" /></div>
+    <div class="logo"><img src="./manutd-crest.webp?v=70" alt="Manchester United" /></div>
     <div>
       <div class="brand-title">QuickBoard</div>
       <div class="brand-sub">daily capture • kanban</div>
@@ -39,7 +39,7 @@
       <option value="nodate">No date</option>
     </select>
     <button id="calBtn" class="btn ghost icon-only" title="Calendar view">📅</button>
-    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=69" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
+    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=70" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
     <button id="undoBtn" class="btn ghost icon-only" title="Undo last change (Ctrl+Z)" disabled>↩</button>
     <button id="selectBtn" class="btn ghost" title="Select multiple cards to delete">Select</button>
     <button id="syncNowBtn" class="btn ghost icon-only" title="Pull latest from cloud now">⟳</button>
@@ -60,35 +60,55 @@
 </nav>
 
 <section class="quickadd hidden" id="quickadd">
-  <div class="qa-row main">
-    <textarea id="quickInput" rows="1" placeholder="Quick add → type or paste anything — first line = title, rest = details. e.g. MOE demo @Meetings #errand due:tomorrow !high" autocomplete="off"></textarea>
-    <button id="voiceBtn" class="btn voice" title="Voice input (speech to text)">🎤</button>
-    <div class="seg" id="voiceLang" title="Voice input language">
-      <button data-l="en-US" class="on">EN</button><button data-l="hi-IN">हिंदी</button>
+  <div class="composer" id="composer" aria-label="New card">
+    <div class="cmp-head">
+      <h1>New card</h1>
+      <div class="seg" id="voiceLang" title="Voice input language">
+        <button data-l="en-US" class="on">EN</button><button data-l="hi-IN">हिंदी</button>
+      </div>
+      <button class="icon" id="voiceBtn" title="Dictate into title" aria-label="Dictate" aria-pressed="false">🎤</button>
+      <button class="icon" id="qaClose" aria-label="Close">✕</button>
     </div>
-    <button id="quickAddBtn" class="btn primary">Add</button>
-    <button id="qaClose" class="btn ghost" title="Close quick add">✕</button>
+    <div class="cmp-fields">
+      <div class="qa-titlewrap"><input id="quickInput" autocomplete="off" placeholder="What needs doing?" aria-label="Card title"></div>
+      <textarea id="qaNotes" rows="1" placeholder="Add details, or paste an invite and we'll fill in the rest" aria-label="Details"></textarea>
+    </div>
+    <div class="cmp-tokens" id="qaTokens" aria-live="polite"></div>
+    <div class="cmp-controls">
+      <div class="cmp-route" role="group" aria-label="Destination">
+        <label class="cmp-field" title="Board"><select id="qaBoard" aria-label="Board"></select></label><span class="cmp-sep">›</span>
+        <label class="cmp-field" title="Column"><select id="qaCol" aria-label="Column"></select></label>
+      </div>
+      <label class="cmp-field" title="Add an existing tag"><select id="quickTag" aria-label="Add tag"></select></label>
+      <label class="cmp-field" title="Due date"><input type="date" id="quickDue" aria-label="Due date"></label>
+      <label class="cmp-field" title="Due time"><input type="time" id="qaTime" aria-label="Due time"></label>
+      <div class="cmp-prio" role="group" aria-label="Priority" id="qaPrio">
+        <button data-p="low" aria-pressed="false"><i></i>Low</button><button data-p="med" aria-pressed="true"><i></i>Med</button><button data-p="high" aria-pressed="false"><i></i>High</button>
+      </div>
+    </div>
+    <div class="cmp-presets" id="qaTemplates"></div>
+    <details class="cmp-tips"><summary>Tips &amp; shortcuts</summary>
+      <dl>
+        <dt><code>#tag</code></dt><dd>Add tags</dd>
+        <dt><code>!high</code> <code>!med</code> <code>!low</code></dt><dd>Set priority</dd>
+        <dt><code>@board</code></dt><dd>Route to a board, e.g. <code>@Quick Notes</code></dd>
+        <dt><code>due:today</code> <code>due:tomorrow</code> <code>due:25-09-2026</code></dt><dd>Set the date</dd>
+        <dt><kbd>N</kbd></dt><dd>Open composer</dd>
+        <dt><kbd>Enter</kbd></dt><dd>Add the card</dd>
+        <dt><kbd>Shift</kbd>+<kbd>Enter</kbd></dt><dd>New line in details</dd>
+        <dt>Paste an invite</dt><dd>Title, details and date fill in automatically</dd>
+      </dl>
+    </details>
+    <div class="cmp-foot">
+      <div class="cmp-keys"><kbd>N</kbd> quick add · <kbd>Enter</kbd> add · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line</div>
+      <button class="btn" id="qaCancel">Cancel</button>
+      <button class="btn primary" id="quickAddBtn" disabled>Add card</button>
+    </div>
   </div>
-  <div class="qa-row details" id="qaDetails">
-    <select id="quickTag" title="Add hashtag">
-      <option value="">#tag</option>
-    </select>
-    <input id="quickDue" type="date" title="Due date" />
-    <select id="quickPriority" title="Priority">
-      <option value="">No priority</option>
-      <option value="low">Low</option>
-      <option value="med" selected>Med</option>
-      <option value="high">High</option>
-    </select>
-    <span class="muted qa-target" id="qaTarget"></span>
-    <span id="smartTags" class="smart-tags"></span>
-  </div>
-  <div class="qa-templates" id="qaTemplates"></div>
-  <div class="qa-hint"><span class="qa-lead">💡 Tip:</span><span class="qa-ex">use <code>#tag</code> for tags,</span><span class="qa-ex"><code>!high / !med / !low</code> for priority,</span><span class="qa-ex"><code>@board</code> to route <code>@Quick Notes</code>,</span><span class="qa-ex"><code>due:today / tomorrow / 25-09-2026</code> for dates.</span><span class="qa-ex"><span class="kbd">N</span> jumps to quick-add, <span class="kbd">Enter</span> adds, <span class="kbd">Shift+Enter</span> new line.</span><span class="qa-ex">Paste invite = title + details + date auto-filled.</span></div>
 </section>
 
 <section id="unitedBar" class="united-bar">
-  <div class="united-badge"><img src="./manutd-crest.webp?v=69" alt="MUFC" /></div>
+  <div class="united-badge"><img src="./manutd-crest.webp?v=70" alt="MUFC" /></div>
   <div class="united-next" id="unitedNext">Loading United fixtures…</div>
   <div class="united-count" id="unitedCount"></div>
   <div class="united-list" id="unitedList"></div>
@@ -100,7 +120,7 @@
 <footer class="footer">
   <span id="statsLine">—</span>
   <span class="dot">•</span>
-  <span id="verLine">v69 • checking sync…</span>
+  <span id="verLine">v70 • checking sync…</span>
   <span class="dot">•</span>
   <span>Add to Home Screen on Samsung for app mode</span>
 </footer>
@@ -275,8 +295,8 @@
   <button id="selDoneBtn" class="mini" title="Exit select mode">Done</button>
 </div>
 
-<script src="./firebase-config.js?v=69"></script>
-<script src="./app.js?v=69"></script>
+<script src="./firebase-config.js?v=70"></script>
+<script src="./app.js?v=70"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

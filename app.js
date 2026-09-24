@@ -141,11 +141,13 @@ function stripListMarker(line){
 })();
 
 // --- quick parse ---
-function parseQuick(text){
+function parseQuick(text, defs){
   text = stripListMarker(text).text;
   let tags = [];
-  let priority = document.getElementById('quickPriority').value || '';
-  let due = document.getElementById('quickDue').value || '';
+  defs = defs||{};
+  let priority = defs.priority||'';
+  let due = defs.due||'';
+  let time = defs.time||'';
   // #tags
   const tagRe = /#([a-zA-Z0-9_-]+)/g;
   let m; while((m = tagRe.exec(text))) tags.push(m[1].toLowerCase());
@@ -212,7 +214,7 @@ function boardCards(boardId){
 // --- render ---
 function render(){
   trackBoard();
-  renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats(); refreshQaMeta(); refreshSearchMeta(); refreshUndoBtn(); renderSelBar();
+  renderTabs(); renderBoard(); renderTagFilter(); updateCredsBanner(); renderStats(); renderComposer(); refreshSearchMeta(); refreshUndoBtn(); renderSelBar();
 }
 // --- search result count + cross-board hint ---
 function refreshSearchMeta(){
@@ -394,7 +396,7 @@ function renderAllBoard(){
     colDiv.querySelector('.add-inline').onclick=()=>{
       const fb=fallbackBoard();
       const t=prompt(`New card in column "${name}" (use @Board to route, else ${fb?.name}):`); if(!t||!t.trim())return;
-      const p=parseQuick(t.trim());
+      const p=parseQuick(t.trim(),{priority:'med'});
       const tb=(p.boardId&&state.boards.find(x=>x.id===p.boardId))||fb; if(!tb)return;
       const rc=realColFor(tb.id,name)||tb.columns[0];
       state.cards.unshift({id:uid(),boardId:tb.id,colId:rc.id,title:p.title||t,details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
@@ -444,7 +446,7 @@ function renderBoard(){
     };
     colDiv.querySelector('.add-inline').onclick=()=>{
       const t=prompt(`New card in ${b.name} → ${col.name}:`); if(!t||!t.trim())return;
-      const p=parseQuick(t.trim());
+      const p=parseQuick(t.trim(),{priority:'med'});
       state.cards.unshift({id:uid(),boardId:b.id,colId:col.id,title:p.title||t,details:'',tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
       $('quickDue').value=''; save(); render();
     };
@@ -887,7 +889,7 @@ function renderPresetsMgr(){
   row.appendChild(inp); row.appendChild(btn); el.appendChild(row);
 }
 const qaSugEl=document.createElement('div'); qaSugEl.id='qaSuggest'; qaSugEl.className='qa-suggest hidden';
-document.querySelector('.quickadd').appendChild(qaSugEl);
+document.querySelector('.qa-titlewrap').appendChild(qaSugEl);
 let qaSugIdx=0, qaSugList=[];
 function qaBoardMatches(){
   const inp=$('quickInput'); const pos=(inp.selectionStart??inp.value.length);
@@ -937,55 +939,100 @@ function rememberSmart(boardId, tags, priority){
     localStorage.setItem(SMART_KEY, JSON.stringify(s));
   }catch{}
 }
-function refreshQaMeta(){
-  const b=fallbackBoard();
-  const t=$('qaTarget');
-  if(t) t.textContent = b?`→ ${b.name} → ${b.columns[0]?.name||''}` : '';
-  const st=$('smartTags'); if(!st) return;
-  const s=getSmart()[state.activeBoardId];
-  st.innerHTML='';
-  (s&&s.tags||[]).forEach(tag=>{
-    const el=document.createElement('span'); el.className='smart-tag'; el.textContent='#'+tag; el.title='Tap to add this tag';
-    el.onclick=()=>{ const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+'#'+tag+' '; inp.focus(); };
-    st.appendChild(el);
-  });
-  if(s&&s.priority) $('quickPriority').value=s.priority;
-  const qt=$('quickTag');
+/* ——— composer: live tokens, board routing, smart defaults ——— */
+let qaPrio='med', qaSelDirty=false, qaPrioTouched=false, qaDateHint=false;
+function qaEls(){ return {t:$('quickInput'), n:$('qaNotes'), b:$('qaBoard'), c:$('qaCol'), tag:$('quickTag'), d:$('quickDue'), tm:$('qaTime')}; }
+function composerPristine(){ const e=qaEls(); return !e.t.value && !e.n.value && !e.d.value && !e.tm.value && !qaSelDirty && !qaPrioTouched; }
+function syncSeg(){ document.querySelectorAll('#qaPrio button').forEach(x=>x.setAttribute('aria-pressed', x.dataset.p===qaPrio)); }
+function setQaPrio(p, strip){
+  qaPrio=p; qaPrioTouched=true; syncSeg();
+  if(strip){ const t=$('quickInput'); t.value=t.value.replace(/(^|\s)!(high|med|low|h|m|l)(?=\s|$)/ig,' ').replace(/\s{2,}/g,' '); }
+  renderQaTokens();
+}
+function stripBoardMention(){
+  const rx=state.boards.map(b=>b.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+  if(!rx) return;
+  const t=$('quickInput');
+  t.value=t.value.replace(new RegExp('(^|\\s)@('+rx+')(?=\\s|$)','ig'),' ').replace(/\s{2,}/g,' ');
+}
+function renderComposer(){
+  const e=qaEls(); if(!e.t||!e.b) return;
+  if(composerPristine()){
+    const b=state.boards.find(x=>x.id===state.activeBoardId)||fallbackBoard();
+    if(b){
+      e.b.innerHTML=state.boards.map(x=>`<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
+      e.b.value=b.id;
+      e.c.innerHTML=b.columns.map(x=>`<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
+      e.c.value=b.columns[0]?.id||'';
+      const sm=getSmart()[b.id];
+      qaPrio=(sm&&sm.priority)||'med'; syncSeg();
+    }
+    qaSelDirty=false;
+  }
+  const qt=e.tag;
   if(qt){
     const cur=qt.value;
     const all=[...new Set([...getPresets(), ...state.cards.flatMap(c=>c.tags||[])])].sort();
     qt.innerHTML='<option value="">#tag</option>'+all.map(t=>`<option value="${t}">#${t}</option>`).join('');
     qt.value=[...qt.options].some(o=>o.value===cur)?cur:'';
-    qt.onchange=()=>{
-      if(!qt.value) return;
-      const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+'#'+qt.value+' ';
-      qt.value=''; expandQa(); inp.focus();
-    };
   }
+  renderQaTokens();
 }
-const QA_TPLS=['#errand !high','due:today !high','due:tomorrow','#idea','@Quick Notes #note','#home due:tomorrow'];
-(function renderQaTpls(){
-  const w=$('qaTemplates'); if(!w) return;
-  QA_TPLS.forEach(t=>{
-    const el=document.createElement('button'); el.className='qa-tpl'; el.textContent=t;
-    el.onclick=()=>{ const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+t+' '; expandQa(); inp.focus(); };
-    w.appendChild(el);
-  });
-})();
-function expandQa(){ $('quickadd').classList.add('expanded'); }
-// quick-add lives behind the FAB; N key or FAB reveals it, blur-empty hides it again
-function showQa(){ $('quickadd').classList.remove('hidden'); expandQa(); const i=$('quickInput'); if(i) i.focus(); }
+function renderQaTokens(){
+  const w=$('qaTokens'); if(!w) return;
+  const e=qaEls();
+  const p=parseQuick(e.t.value, {priority:qaPrio, due:e.d.value, time:e.tm.value});
+  if(p.boardId && e.b.value!==p.boardId){ // live-route selects to @board in text
+    const rb=state.boards.find(x=>x.id===p.boardId);
+    if(rb){ e.b.value=rb.id; e.c.innerHTML=rb.columns.map(x=>`<option value="${x.id}">${escapeHtml(x.name)}</option>`).join(''); }
+  }
+  let h='';
+  p.tags.forEach(t=>{ h+=`<span class="tok">#${t}<button data-untag="${t}" title="Remove tag">×</button></span>`; });
+  if(p.due) h+=`<span class="tok">📅 ${fmtDate(p.due)}<button data-undue="1" title="Remove date">×</button></span>`;
+  document.querySelectorAll('#qaPrio button').forEach(x=>x.setAttribute('aria-pressed', x.dataset.p===(p.priority||qaPrio)));
+  const intel=detectMeeting(e.t.value+'\n'+e.n.value);
+  if(intel.due && !p.due && !e.d.value) h+=`<span class="tok ghost">Date filled from invite: ${fmtDate(intel.due)}</span>`;
+  w.innerHTML=h;
+  w.querySelectorAll('[data-untag]').forEach(x=>{ x.onclick=()=>{ const t=x.dataset.untag; const inp=$('quickInput'); inp.value=inp.value.replace(new RegExp('(^|\\s)#'+t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?=\\s|$)','ig'),' ').replace(/\s{2,}/g,' '); inp.focus(); renderQaTokens(); }; });
+  w.querySelectorAll('[data-undue]').forEach(x=>{ x.onclick=()=>{ const inp=$('quickInput'); inp.value=inp.value.replace(/(^|\s)due:\S+(?=\s|$)/ig,' ').replace(/\s{2,}/g,' '); $('quickDue').value=''; inp.focus(); renderQaTokens(); }; });
+  $('quickAddBtn').disabled=!p.title;
+}
+// quick-add lives behind the FAB; N key or FAB reveals it
+function showQa(){ $('quickadd').classList.remove('hidden'); renderComposer(); const i=$('quickInput'); if(i) i.focus(); }
 function hideQa(){ $('quickadd').classList.add('hidden'); }
 $('fabBtn').onclick=()=>showQa();
 $('qaClose').onclick=()=>{ try{$('quickInput').blur();}catch{} hideQa(); };
+$('qaCancel').onclick=()=>resetComposer();
 $('clearFilters').onclick=()=>{ $('searchInput').value=''; $('filterTag').value=''; $('filterPriority').value=''; $('filterDue').value=''; render(); };
-function maybeCollapseQa(){
-  const qa=$('quickadd');
-  if(qa.contains(document.activeElement)) return; // focus moved to date/priority/tag/mic — keep open
-  if(!$('quickInput').value){ qa.classList.remove('expanded'); hideQa(); }
+/* composer controls */
+const QA_TPLS=['#errand !high','due:today !high','due:tomorrow','#idea','@Quick Notes #note','#home due:tomorrow'];
+(function renderQaTpls(){
+  const w=$('qaTemplates'); if(!w||w.children.length) return;
+  const lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent='Quick add'; w.appendChild(lbl);
+  QA_TPLS.forEach(t=>{
+    const el=document.createElement('button'); el.className='qa-tpl'; el.textContent=t;
+    el.onclick=()=>{ const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+t+' '; inp.focus(); renderQaTokens(); };
+    w.appendChild(el);
+  });
+})();
+document.querySelectorAll('#qaPrio button').forEach(x=>{ x.onclick=()=>setQaPrio(x.dataset.p,true); });
+$('qaBoard').onchange=()=>{ qaSelDirty=true; stripBoardMention(); const rb=state.boards.find(x=>x.id===$('qaBoard').value); if(rb){ $('qaCol').innerHTML=rb.columns.map(x=>`<option value="${x.id}">${escapeHtml(x.name)}</option>`).join(''); } renderQaTokens(); };
+$('qaCol').onchange=()=>{ qaSelDirty=true; };
+$('quickTag').onchange=()=>{
+  const qt=$('quickTag'); if(!qt.value) return;
+  const inp=$('quickInput'); inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+'#'+qt.value+' ';
+  qt.value=''; inp.focus(); renderQaTokens();
+};
+$('quickDue').onchange=()=>{ renderQaTokens(); };
+$('qaTime').onchange=()=>{ renderQaTokens(); };
+$('quickInput').addEventListener('input',()=>{ renderQaTokens(); });
+$('qaNotes').addEventListener('input',()=>{ const n=$('qaNotes'); n.style.height='auto'; n.style.height=Math.min(n.scrollHeight,160)+'px'; renderQaTokens(); });
+function resetComposer(){
+  const e=qaEls();
+  e.t.value=''; e.n.value=''; e.n.style.height='auto'; e.d.value=''; e.tm.value='';
+  qaPrio='med'; syncSeg(); qaSelDirty=false; qaPrioTouched=false;
+  renderComposer(); e.t.focus();
 }
-$('quickInput').addEventListener('focus',()=>{ expandQa(); refreshQaMeta(); });
-$('quickInput').addEventListener('blur',()=>{ setTimeout(maybeCollapseQa,150); });
 /* voice capture — Wispr-style: continuous, persistent, stops only on mic tap */
 let recog=null, listening=false, userStopped=false, voiceFinal='', voiceInterim='', voiceTickInt=null, voiceStart=0, voiceRestarts=0, voiceCommitT=null, voiceWatchInt=null, lastVoiceAt=0;
 function voiceUI(on){
@@ -1061,7 +1108,7 @@ function commitVoice(cancelled){
   if(cancelled||!txt) return;
   const inp=$('quickInput');
   inp.value=(inp.value?inp.value.replace(/\s+$/,'')+' ':'')+txt+' ';
-  expandQa(); inp.focus();
+  inp.focus();
 }
 function finishVoice(cancelled){
   userStopped=true;
@@ -1079,10 +1126,10 @@ function pickTitle(lines){
   }
   return (lines[0]||'').slice(0,120);
 }
-function parseFull(raw){
+function parseFull(raw, defs){
   // one-step capture: first line = title, rest = details; tokens + meeting intel over everything
   const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);
-  const p=parseQuick(lines.join('\n'));
+  const p=parseQuick(lines.join('\n'),defs||{priority:'med'});
   const plines=p.title.split('\n').map(s=>stripListMarker(s).text.trim()).filter(Boolean);
   const title=pickTitle(plines);
   const ti=plines.indexOf(title);
@@ -1101,27 +1148,44 @@ function parseFull(raw){
   return {title, details, tags, priority, due, time, boardId, isMeeting:intel.isMeeting};
 }
 function doQuickAdd(){
-  const inp=$('quickInput'); const v=inp.value.trim(); if(!v)return;
-  const p=parseFull(v);
-  if(!p.title){alert('Type a title');return;}
-  const b=(p.boardId && state.boards.find(x=>x.id===p.boardId)) || fallbackBoard();
-  const firstCol=b.columns[0].id;
-  state.cards.unshift({id:uid(),boardId:b.id,colId:firstCol,title:p.title,details:p.details,tags:p.tags,priority:p.priority,due:p.due,time:p.time||'',createdAt:Date.now()});
-  inp.value=''; inp.style.height='auto'; $('quickDue').value='';
-  rememberSmart(b.id, p.tags, p.priority);
-  refreshQaMeta();
-  qaSugEl.classList.add('hidden');
+  const e=qaEls();
+  const raw=e.t.value.trim(); if(!raw)return;
+  const p=parseQuick(raw, {priority:qaPrio, due:e.d.value, time:e.tm.value});
+  if(!p.title){ toast('Type a title'); return; }
+  const notes=e.n.value.trim();
+  const intel=detectMeeting(raw+'\n'+notes);
+  let {tags, priority, due, boardId}=p;
+  let time=e.tm.value||'';
+  if(intel.due && !due) due=intel.due;
+  if(intel.time && !time) time=intel.time;
+  if(intel.hasTime && (priority===''||priority==='med')) priority='high';
+  if(intel.isMeeting){
+    if(!boardId){ const mb=state.boards.find(b=>/meeting/i.test(b.name)); if(mb) boardId=mb.id; }
+    if(!tags.includes('meetings')) tags=[...tags,'meetings'];
+    addPreset('meetings');
+  }
+  const b=(boardId&&state.boards.find(x=>x.id===boardId))||state.boards.find(x=>x.id===e.b.value)||fallbackBoard();
+  if(!b) return;
+  const col=b.columns.find(x=>x.id===e.c.value)||b.columns[0];
+  state.cards.unshift({id:uid(),boardId:b.id,colId:col.id,title:p.title.slice(0,200),details:notes.slice(0,2000),tags,priority,due,time:time||'',createdAt:Date.now()});
+  rememberSmart(b.id, tags, priority);
+  resetComposer();
   state.activeBoardId=b.id; // jump to the targeted board so you see the card
-  save(); render(); inp.focus();
+  save(); render(); e.t.focus();
 }
 $('quickAddBtn').onclick=doQuickAdd;
 function autogrowQa(){ const inp=$('quickInput'); inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,132)+'px'; }
 $('quickInput').addEventListener('input',()=>{ autogrowQa(); });
 $('quickInput').addEventListener('keydown',(e)=>{
-  if(e.key!=='Enter'||e.shiftKey) return; // Shift+Enter = newline
+  if(e.key!=='Enter') return;
   e.preventDefault();
   if(listening){ return; } // mic-tap only stops recording; Enter never interrupts speech
   if(voiceCommitT){ clearTimeout(voiceCommitT); voiceCommitT=null; commitVoice(false); } // flush pending dictation first
+  doQuickAdd();
+});
+$('qaNotes').addEventListener('keydown',(e)=>{
+  if(e.key!=='Enter'||e.shiftKey) return; // Shift+Enter = newline in details
+  e.preventDefault();
   doQuickAdd();
 });
 document.addEventListener('keydown',(e)=>{
@@ -1507,7 +1571,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v69';
+const APP_VER = 'v70';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
