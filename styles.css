@@ -177,6 +177,7 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .modal-card label{display:block;font-size:13px;font-weight:600;margin:8px 0}
 .modal-card input,.modal-card textarea,.modal-card select{width:100%;margin-top:4px;border:1px solid var(--line);border-radius:10px;padding:9px;font-size:14px;font-family:inherit}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid2 .span2{grid-column:span 2}
 .modal-actions{display:flex;gap:8px;margin-top:12px;align-items:center}
 .spacer{flex:1}
 .muted{color:#64748b;font-size:13px}

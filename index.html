@@ -9,12 +9,12 @@
 <link rel="manifest" href="./manifest.webmanifest" />
 <link rel="icon" href="./icon-192.png" />
 <link rel="apple-touch-icon" href="./icon-180.png" />
-<link rel="stylesheet" href="./styles.css?v=62" />
+<link rel="stylesheet" href="./styles.css?v=63" />
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo"><img src="./manutd-crest.webp?v=62" alt="Manchester United" /></div>
+    <div class="logo"><img src="./manutd-crest.webp?v=63" alt="Manchester United" /></div>
     <div>
       <div class="brand-title">QuickBoard</div>
       <div class="brand-sub">daily capture • kanban</div>
@@ -39,7 +39,7 @@
       <option value="nodate">No date</option>
     </select>
     <button id="calBtn" class="btn ghost icon-only" title="Calendar view">📅</button>
-    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=62" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
+    <button id="utdBtn" class="utd-btn" title="Man Utd fixtures"><img src="./manutd-crest.webp?v=63" alt="MUFC" /><span class="utd-dot hidden" id="utdDot"></span></button>
     <button id="undoBtn" class="btn ghost icon-only" title="Undo last change (Ctrl+Z)" disabled>↩</button>
     <button id="selectBtn" class="btn ghost" title="Select multiple cards to delete">Select</button>
     <button id="syncNowBtn" class="btn ghost icon-only" title="Pull latest from cloud now">⟳</button>
@@ -88,7 +88,7 @@
 </section>
 
 <section id="unitedBar" class="united-bar">
-  <div class="united-badge"><img src="./manutd-crest.webp?v=62" alt="MUFC" /></div>
+  <div class="united-badge"><img src="./manutd-crest.webp?v=63" alt="MUFC" /></div>
   <div class="united-next" id="unitedNext">Loading United fixtures…</div>
   <div class="united-count" id="unitedCount"></div>
   <div class="united-list" id="unitedList"></div>
@@ -100,7 +100,7 @@
 <footer class="footer">
   <span id="statsLine">—</span>
   <span class="dot">•</span>
-  <span id="verLine">v62 • checking sync…</span>
+  <span id="verLine">v63 • checking sync…</span>
   <span class="dot">•</span>
   <span>Add to Home Screen on Samsung for app mode</span>
 </footer>
@@ -118,6 +118,9 @@
     <div class="grid2">
       <label>Priority<select id="mPriority"><option value="">None</option><option value="low">Low</option><option value="med">Med</option><option value="high">High</option></select></label>
       <label>Column<select id="mColumn"></select></label>
+    </div>
+    <div class="grid2">
+      <label class="span2">Board<select id="mBoard"></select></label>
     </div>
     <div class="modal-actions">
       <button id="mBackCal" class="btn ghost hidden" title="Back to calendar">← Calendar</button>
@@ -244,8 +247,8 @@
   <button id="selDoneBtn" class="mini" title="Exit select mode">Done</button>
 </div>
 
-<script src="./firebase-config.js?v=62"></script>
-<script src="./app.js?v=62"></script>
+<script src="./firebase-config.js?v=63"></script>
+<script src="./app.js?v=63"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

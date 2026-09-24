@@ -300,6 +300,7 @@ function renderTabs(){
     const btn = document.createElement('div');
     btn.className = 'board-tab' + (b.id===state.activeBoardId?' active':'');
     btn.style.cssText = tabFill(p, b.id===state.activeBoardId, n>0&&p>=100);
+    btn.dataset.boardId = b.id;
     btn.innerHTML = `<span></span> <span class="cnt" style="opacity:.6;font-weight:400">(${n})</span>`;
     btn.firstChild.textContent = b.name;
     btn.title = `${b.name} — ${p}% in Done (double-click or ✏️ to rename)`;
@@ -322,13 +323,15 @@ function renderTabs(){
       if(idx>0) btn.insertBefore(mk('‹',-1),btn.firstChild);
       btn.appendChild(mk('›',1));
     }
-    // desktop drag-to-reorder tabs
+    // desktop DnD on tabs: board-reorder (board payload) AND card-move (card payload)
     btn.draggable=true;
     btn.ondragstart=(e)=>{ e.dataTransfer.setData('text/board-id',b.id); };
     btn.ondragover=(e)=>{ e.preventDefault(); btn.classList.add('drag-over'); };
     btn.ondragleave=()=>btn.classList.remove('drag-over');
     btn.ondrop=(e)=>{
       e.preventDefault(); e.stopPropagation(); btn.classList.remove('drag-over');
+      const cardId=e.dataTransfer.getData('text/card-id');
+      if(cardId){ dropCardOnBoard(cardId,b.id); return; } // card onto tab = move it here
       const id=e.dataTransfer.getData('text/board-id'); if(!id||id===b.id) return;
       const arr=state.boards, from=arr.findIndex(z=>z.id===id), to=arr.findIndex(z=>z.id===b.id);
       if(from<0||to<0) return;
@@ -522,10 +525,12 @@ function cardNode(c, board, colIdx){
       }
       tdrag.ghost.style.left=(ev.clientX-tdrag.ghost.offsetWidth/2)+'px';
       tdrag.ghost.style.top=(ev.clientY-44)+'px';
-      document.querySelectorAll('.col.drag-over').forEach(x=>x.classList.remove('drag-over'));
+      document.querySelectorAll('.col.drag-over,.board-tab.drag-over').forEach(x=>x.classList.remove('drag-over'));
       const el=document.elementFromPoint(ev.clientX,ev.clientY);
+      const tab=el&&el.closest?el.closest('.board-tab'):null;
       const col=el&&el.closest?el.closest('.col'):null;
-      if(col) col.classList.add('drag-over');
+      if(tab&&tab.dataset.boardId) tab.classList.add('drag-over');
+      else if(col) col.classList.add('drag-over');
     };
     const up=(ev)=>{
       d.removeEventListener('pointermove',move); d.removeEventListener('pointerup',up); d.removeEventListener('pointercancel',up);
@@ -533,8 +538,10 @@ function cardNode(c, board, colIdx){
       cancelPress();
       if(!tdrag) return;
       const g=tdrag; tdrag=null; g.ghost.remove();
-      document.querySelectorAll('.col.drag-over').forEach(x=>x.classList.remove('drag-over'));
+      document.querySelectorAll('.col.drag-over,.board-tab.drag-over').forEach(x=>x.classList.remove('drag-over'));
       const el=document.elementFromPoint(ev.clientX,ev.clientY);
+      const tab=el&&el.closest?el.closest('.board-tab'):null;
+      if(tab&&tab.dataset.boardId&&tab.dataset.boardId!=='__all'){ dropCardOnBoard(g.id,tab.dataset.boardId); return; }
       const col=el&&el.closest?el.closest('.col'):null;
       if(col) dropCardOnCol(g.id,col);
     };
@@ -559,6 +566,18 @@ function moveCard(c, dir){
   const i=b.columns.findIndex(x=>x.id===c.colId);
   const j=i+dir; if(j<0||j>=b.columns.length)return;
   c.colId=b.columns[j].id; save(); render();
+}
+function dropCardOnBoard(id,boardId){
+  const card=state.cards.find(x=>x.id===id);
+  const b=state.boards.find(x=>x.id===boardId);
+  if(!card||!b||boardId==='__all') return;
+  if(card.boardId!==b.id){
+    const srcCol=(state.boards.find(y=>y.id===card.boardId)?.columns.find(z=>z.id===card.colId)?.name);
+    const col=b.columns.find(x=>x.name===srcCol)||b.columns[0];
+    card.boardId=b.id; if(col) card.colId=col.id;
+  }
+  state.activeBoardId=b.id; save(); render();
+  toast(`Moved to ${b.name} ✓`);
 }
 function dropCardOnCol(id,colEl){
   const card=state.cards.find(x=>x.id===id); if(!card||!colEl) return;
@@ -1036,17 +1055,30 @@ function openCardModal(id){
   $('mTags').value=(c.tags||[]).join(', '); $('mDue').value=c.due||''; $('mPriority').value=c.priority||'';
   $('mColumn').innerHTML=(b?.columns||[]).map(col=>`<option value="${col.id}">${col.name}</option>`).join('');
   $('mColumn').value=c.colId;
+  $('mBoard').innerHTML=state.boards.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
+  $('mBoard').value=c.boardId;
   renderMPresets();
   autoDetectModal();
   $('cardModal').classList.remove('hidden');
 }
+$('mBoard').onchange=()=>{
+  const nb=state.boards.find(x=>x.id===$('mBoard').value); if(!nb) return;
+  const keepCol=$('mColumn').value;
+  $('mColumn').innerHTML=nb.columns.map(col=>`<option value="${col.id}">${col.name}</option>`).join('');
+  $('mColumn').value=nb.columns.some(x=>x.id===keepCol)?keepCol:(nb.columns[0]?.id||'');
+};
 $('mCancel').onclick=()=>{ calReturn=false; $('cardModal').classList.add('hidden'); };
 $('mBackCal').onclick=()=>{ calReturn=false; $('cardModal').classList.add('hidden'); $('calModal').classList.remove('hidden'); renderCal(); };
 $('mSave').onclick=()=>{
   const c=state.cards.find(x=>x.id===editingId); if(!c)return;
   c.title=$('mTitle').value.trim()||c.title; c.details=$('mDetails').value;
   c.tags=$('mTags').value.split(',').map(s=>sanitizeTag(s.trim().replace(/^#/,''))).filter(Boolean);
-  c.due=$('mDue').value; c.priority=$('mPriority').value; c.colId=$('mColumn').value;
+  c.due=$('mDue').value; c.priority=$('mPriority').value;
+  const nb=state.boards.find(x=>x.id===$('mBoard').value);
+  if(nb&&nb.id!==c.boardId){
+    const col=nb.columns.find(x=>x.id===$('mColumn').value)||nb.columns.find(x=>x.name===(state.boards.find(y=>y.id===c.boardId)?.columns.find(z=>z.id===c.colId)?.name))||nb.columns[0];
+    c.boardId=nb.id; if(col) c.colId=col.id;
+  } else c.colId=$('mColumn').value;
   calReturn=false; $('cardModal').classList.add('hidden'); save(); render();
 };
 $('mDelete').onclick=()=>{
@@ -1241,7 +1273,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v62';
+const APP_VER = 'v63';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
