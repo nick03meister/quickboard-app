@@ -184,23 +184,8 @@ function stripListMarker(line){
   t=t.replace(/^\s*\[[ xX]\]\s*/,'');
   return {text:t, checked};
 }
-// one-time cleanup: strip "- [ ]" markers off titles imported before stripping existed (undoable)
-(function cleanMarkersOnce(){
-  try{
-    if(localStorage.getItem('qb.markers.cleaned')==='1') return;
-    let n=0;
-    state.cards.forEach(c=>{
-      const t=stripListMarker(c.title||'').text.trim();
-      if(t&&t!==c.title){ c.title=t.slice(0,200); n++; }
-      if(c.details){
-        const d2=c.details.split('\n').map(l=>stripListMarker(l).text.trim()).join('\n').replace(/\n{3,}/g,'\n\n').trim();
-        if(d2!==c.details){ c.details=d2; n++; }
-      }
-    });
-    localStorage.setItem('qb.markers.cleaned','1');
-    if(n){ save(); render(); toast(`Cleaned ${n} card${n>1?'s':''} ✓ — Undo available`); }
-  }catch{}
-})();
+// NOTE: an old one-time cleanup used to strip "- [ ]" markers from stored cards.
+// It is permanently removed: markers are content now, never touched.
 
 // --- quick parse ---
 function parseQuick(text, defs){
@@ -542,7 +527,7 @@ function fmtInline(s){
   s = s.replace(/(^|[\s(>])(https?:\/\/[^\s<)]+)/g,'$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   return s;
 }
-function formatDetails(text){
+function formatDetails(text, cardId){
   const lines=(text||'').split(/\r?\n/);
   let html='', list=null, ln=-1;
   const close=()=>{ if(list){ html+=`</${list}>`; list=null; } };
@@ -550,7 +535,12 @@ function formatDetails(text){
     ln++;
     let m;
     if((m=/^#{1,3}\s+(.*)/.exec(line))){ close(); html+=`<div class="md-h">${fmtInline(m[1])}</div>`; }
-    else if((m=/^\s*[-*]\s*\[([ xX])\]\s*(.*)/.exec(line))){ if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';} html+=`<li class="md-todo${/x/i.test(m[1])?' done':''}" data-ln="${ln}">${fmtInline(m[2])}</li>`; }
+    else if((m=/^\s*[-*]\s*\[([ xX])\]\s*(.*)/.exec(line))){
+      if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';}
+      const done=/x/i.test(m[1]);
+      const just=justTicked&&justTicked.id===cardId&&justTicked.ln===ln&&(Date.now()-justTicked.ts<4000);
+      html+=`<li class="md-todo${done?' done':''}" data-ln="${ln}"><span class="tick${just?' tick-pop':''}"></span><span>${fmtInline(m[2])}</span></li>`;
+    }
     else if((m=/^\s*[-*•]\s+(.*)/.exec(line))){ if(list!=='ul'){close();html+='<ul class="md-list">';list='ul';} html+=`<li>${fmtInline(m[1])}</li>`; }
     else if((m=/^\s*\d+[.)]\s+(.*)/.exec(line))){ if(list!=='ol'){close();html+='<ol class="md-list">';list='ol';} html+=`<li>${fmtInline(m[1])}</li>`; }
     else if(/^\s*$/.test(line)){ close(); }
@@ -559,6 +549,7 @@ function formatDetails(text){
   close();
   return html;
 }
+let justTicked=null;
 function toggleTodo(cardId, ln){
   const c=state.cards.find(x=>x.id===cardId); if(!c||!c.details) return;
   const lines=c.details.split('\n');
@@ -567,6 +558,7 @@ function toggleTodo(cardId, ln){
   if(!m) return;
   lines[ln]=m[1]+(/[xX]/.test(m[2])?' ':'x')+m[3];
   c.details=lines.join('\n');
+  justTicked={id:cardId, ln, ts:Date.now()};
   save(); render();
 }
 function dueChip(c){
@@ -602,7 +594,7 @@ function cardNode(c, board, colIdx){
     el.onclick=(e)=>{ e.stopPropagation(); const ft=$('filterTag'); ft.value=(ft.value===el.dataset.tag)?'':el.dataset.tag; renderBoard(); };
   });
   d.querySelector('.card-title').textContent=c.title;
-  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); box.querySelectorAll('.md-todo').forEach(li=>{ li.title='Tap to tick/untick'; li.onclick=(e)=>{ e.stopPropagation(); if(selectMode) return; toggleTodo(c.id, +li.dataset.ln); }; }); }
+  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details, c.id); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); box.querySelectorAll('.md-todo').forEach(li=>{ li.title='Tap to tick/untick'; li.onclick=(e)=>{ e.stopPropagation(); if(selectMode) return; toggleTodo(c.id, +li.dataset.ln); }; }); }
   if(selectMode&&selected.has(c.id)) d.classList.add('selected');
   // escape tag chips already safe (tags sanitized lowercase alnum)
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
@@ -907,7 +899,7 @@ function mdApply(mode){
     let le=v.indexOf('\n',e); if(le<0) le=v.length;
     const block=v.slice(ls,le).split('\n');
     const pre=block.map((ln,i)=>{
-      const t=ln.replace(/^(\s*)(?:[-*•]\s+|\d+[.)]\s+|-\s+\[[ xX]\]\s+)?/,'$1');
+      const t=ln.replace(/^(\s*)(?:-\s+\[[ xX]\]\s+|[-*•]\s+|\d+[.)]\s+)?/,'$1');
       if(mode==='bullets') return t.replace(/^(\s*)/,'$1- ');
       if(mode==='numbered') return t.replace(/^(\s*)/,'$1'+(i+1)+'. ');
       return t.replace(/^(\s*)/,'$1- [ ] ');
@@ -1238,9 +1230,9 @@ function parseFull(raw, defs){
   // one-step capture: first line = title, rest = details; tokens + meeting intel over everything
   const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const p=parseQuick(lines.join('\n'),defs||{priority:'med'});
-  const plines=p.title.split('\n').map(s=>stripListMarker(s).text.trim()).filter(Boolean);
-  const title=pickTitle(plines);
-  const ti=plines.indexOf(title);
+  const plines=p.title.split('\n').map(s=>s.trim()).filter(Boolean);
+  const title=pickTitle(plines.map(s=>stripListMarker(s).text.trim()));
+  const ti=plines.findIndex(s=>stripListMarker(s).text.trim()===title);
   const details=(ti>=0?[...plines.slice(0,ti),...plines.slice(ti+1)]:plines).join('\n').slice(0,2000);
   const intel=detectMeeting(p.title);
   let {tags, priority, due, boardId} = p;
@@ -1684,7 +1676,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v78';
+const APP_VER = 'v79';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
