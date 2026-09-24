@@ -581,6 +581,7 @@ function openCardView(id, keepOpen){
   if(!keepOpen) $('viewModal').classList.remove('hidden');
 }
 $('viewClose').onclick=()=>{ viewingId=null; $('viewModal').classList.add('hidden'); };
+$('viewModal').addEventListener('click',(e)=>{ if(e.target===$('viewModal')){ viewingId=null; $('viewModal').classList.add('hidden'); } });
 $('viewEdit').onclick=()=>{ const id=viewingId; viewingId=null; $('viewModal').classList.add('hidden'); if(id) openCardModal(id); };
 $('viewDelete').onclick=()=>{
   const c=state.cards.find(x=>x.id===viewingId); if(!c) return;
@@ -1716,7 +1717,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v81';
+const APP_VER = 'v82';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
