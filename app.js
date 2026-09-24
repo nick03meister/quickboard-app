@@ -1457,6 +1457,7 @@ function renderCal(){
 }
 $('calBtn').onclick=openCal;
 $('calClose').onclick=()=>$('calModal').classList.add('hidden');
+$('calModal').addEventListener('click',(e)=>{ if(e.target===$('calModal')) $('calModal').classList.add('hidden'); });
 $('calPrev').onclick=()=>{ calM--; if(calM<0){calM=11;calY--;} renderCal(); };
 $('calNext').onclick=()=>{ calM++; if(calM>11){calM=0;calY++;} renderCal(); };
 $('calTodayBtn').onclick=()=>{ const t=new Date(); calY=t.getFullYear(); calM=t.getMonth(); calSel=todayStr(); renderCal(); };
@@ -1718,7 +1719,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v83';
+const APP_VER = 'v84';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
