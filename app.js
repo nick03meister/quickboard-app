@@ -387,7 +387,7 @@ function renderAllBoard(){
     const cards=state.cards.filter(c=>{
       const rc=realColFor(c.boardId,name); if(!rc||c.colId!==rc.id) return false;
       return cardMatches(c,f);
-    }).sort((a,c2)=>(a.due||'9999')<(c2.due||'9999')?-1:1);
+    }).sort((a,c2)=>((a.due||'9999')+(a.time||''))<((c2.due||'9999')+(c2.time||''))?-1:1);
     colDiv.innerHTML=`<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span><span class="col-actions"><button class="mini" data-act="sel" title="Select multiple cards">Select</button></span></div><div class="cards"></div><button class="add-inline">+ Add card</button>`;
     colDiv.querySelector('.col-name').textContent=name;
     colDiv.querySelector('[data-act="sel"]').onclick=()=>setSelectMode(true);
@@ -426,7 +426,7 @@ function renderBoard(){
     const colDiv = document.createElement('div');
     colDiv.className='col'; colDiv.dataset.colId=col.id;
     const cards = state.cards.filter(c=>c.boardId===b.id && c.colId===col.id && cardMatches(c,f))
-      .sort((a,c2)=>(a.due||'9999')<(c2.due||'9999')?-1:1);
+      .sort((a,c2)=>((a.due||'9999')+(a.time||''))<((c2.due||'9999')+(c2.time||''))?-1:1);
     colDiv.innerHTML = `<div class="col-header"><span class="col-name"></span><span class="col-count">${cards.length}</span>
       <span class="col-actions"><button class="mini" data-act="sel" title="Select multiple cards">Select</button><button class="mini" data-act="rename" title="Rename this column">✏️</button><button class="mini del" data-act="del" title="Delete this entire COLUMN (cards move to first column)">Column 🗑️</button></span></div>
       <div class="cards"></div><button class="add-inline">+ Add card</button>`;
@@ -465,10 +465,11 @@ function renderBoard(){
 }
 function fmtDate(iso){ const m=/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(iso||''); return m?`${m[3]}-${m[2]}-${m[1]}`:(iso||''); }
 function dueChip(c){
-  if(!c.due) return '';
-  let cls='chip', label='📅 '+fmtDate(c.due);
-  if(isOverdue(c.due)){cls+=' due-over';label='⚠️ '+fmtDate(c.due);}
-  else if(isToday(c.due)){cls+=' due-today';label='⏰ today';}
+  if(!c.due && !c.time) return '';
+  const when=[c.due?fmtDate(c.due):'',c.time||''].filter(Boolean).join(' · ');
+  let cls='chip', label=(c.due?'📅 ':'⏰ ')+when;
+  if(c.due&&isOverdue(c.due)){cls+=' due-over';label='⚠️ '+when;}
+  else if(c.due&&isToday(c.due)){cls+=' due-today';label='⏰ '+when;}
   return `<span class="${cls}">${label}</span>`;
 }
 function cardNode(c, board, colIdx){
@@ -719,13 +720,43 @@ function detectMeeting(text){
     if(iso<todayStr()&&!yrGiven){ yy=cur+1; iso=`${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`; }
     due=iso;
   }
-  return {isMeeting, hasTime, due};
+  // start time: range "2:30 – 3:00pm" (end marker applies to start) first, then
+  // marked singles "10:30am"/"9am" — a bare "10:00" with no marker stays out (ambiguous)
+  let time='';
+  let tm=t.match(/(\d{1,2}):(\d{2})[^0-9:]{0,12}\d{1,2}:\d{2}\s*([ap])\.?m\.?/i)
+    ||t.match(/(\d{1,2}):(\d{2})\s*([ap])\.?m\.?/i);
+  if(!tm){
+    const b=t.match(/\b(\d{1,2})\s*([ap])\.?m\.?\b/i);
+    if(b) tm=[b[0],b[1],'00',b[2]];
+  }
+  if(tm){
+    let h=+tm[1]; const ap=tm[3].toLowerCase();
+    if(ap==='p'&&h<12)h+=12; if(ap==='a'&&h===12)h=0;
+    if(h>=0&&h<=23&&+tm[2]>=0&&+tm[2]<=59) time=`${String(h).padStart(2,'0')}:${tm[2]}`;
+  }
+  return {isMeeting, hasTime:!!time||hasTime, due, time};
+}
+// one-time backfill: pull start times out of existing meeting details into the time field
+function backfillTimeOnce(){
+  try{
+    if(localStorage.getItem('qb.time.backfilled')==='1') return;
+    let n=0;
+    state.cards.forEach(c=>{
+      if(!c.time && (c.details||c.title)){
+        const r=detectMeeting(((c.details||'')+'\n'+(c.title||'')));
+        if(r.time){ c.time=r.time; n++; }
+      }
+    });
+    localStorage.setItem('qb.time.backfilled','1');
+    if(n){ save(); toast(`Added times to ${n} card${n>1?'s':''} ✓`); }
+  }catch{}
 }
 let mDetectT=null;
 function autoDetectModal(){
   // non-destructive: fills Due only if empty, High only from None/Med defaults, tags only appended
   const r=detectMeeting($('mDetails').value);
   if(r.due && !$('mDue').value) $('mDue').value=r.due;
+  if(r.time && !$('mTime').value) $('mTime').value=r.time;
   if(r.hasTime && ($('mPriority').value===''||$('mPriority').value==='med')) $('mPriority').value='high';
   if(r.isMeeting){
     const cur=$('mTags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
@@ -738,6 +769,7 @@ $('mAutofill').onclick=()=>{
   const r=detectMeeting($('mDetails').value);
   if(!r.due&&!r.isMeeting){ alert('No date or meeting found in the details.'); return; }
   if(r.due) $('mDue').value=r.due;
+  if(r.time) $('mTime').value=r.time;
   if(r.hasTime) $('mPriority').value='high';
   if(r.isMeeting){
     const cur=$('mTags').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
@@ -992,14 +1024,16 @@ function parseFull(raw){
   const details=(ti>=0?[...plines.slice(0,ti),...plines.slice(ti+1)]:plines).join('\n').slice(0,2000);
   const intel=detectMeeting(p.title);
   let {tags, priority, due, boardId} = p;
+  let time='';
   if(intel.due && !due) due=intel.due;
+  if(intel.time) time=intel.time;
   if(intel.hasTime && (priority===''||priority==='med')) priority='high';
   if(intel.isMeeting){
     if(!boardId){ const mb=state.boards.find(b=>/meeting/i.test(b.name)); if(mb) boardId=mb.id; }
     if(!tags.includes('meetings')) tags=[...tags,'meetings'];
     addPreset('meetings');
   }
-  return {title, details, tags, priority, due, boardId, isMeeting:intel.isMeeting};
+  return {title, details, tags, priority, due, time, boardId, isMeeting:intel.isMeeting};
 }
 function doQuickAdd(){
   const inp=$('quickInput'); const v=inp.value.trim(); if(!v)return;
@@ -1007,7 +1041,7 @@ function doQuickAdd(){
   if(!p.title){alert('Type a title');return;}
   const b=(p.boardId && state.boards.find(x=>x.id===p.boardId)) || fallbackBoard();
   const firstCol=b.columns[0].id;
-  state.cards.unshift({id:uid(),boardId:b.id,colId:firstCol,title:p.title,details:p.details,tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
+  state.cards.unshift({id:uid(),boardId:b.id,colId:firstCol,title:p.title,details:p.details,tags:p.tags,priority:p.priority,due:p.due,time:p.time||'',createdAt:Date.now()});
   inp.value=''; inp.style.height='auto'; $('quickDue').value='';
   rememberSmart(b.id, p.tags, p.priority);
   refreshQaMeta();
@@ -1054,7 +1088,7 @@ function openCardModal(id){
   $('modalTitle').textContent=`Edit — ${b?.name||''}`;
   $('mBackCal').classList.toggle('hidden',!calReturn);
   $('mTitle').value=c.title; $('mDetails').value=c.details||'';
-  $('mTags').value=(c.tags||[]).join(', '); $('mDue').value=c.due||''; $('mPriority').value=c.priority||'';
+  $('mTags').value=(c.tags||[]).join(', '); $('mDue').value=c.due||''; $('mTime').value=c.time||''; $('mPriority').value=c.priority||'';
   $('mColumn').innerHTML=(b?.columns||[]).map(col=>`<option value="${col.id}">${col.name}</option>`).join('');
   $('mColumn').value=c.colId;
   $('mBoard').innerHTML=state.boards.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
@@ -1079,6 +1113,7 @@ function isCardDirty(){
     || $('mDetails').value!==(c.details||'')
     || tags.join(',')!==(c.tags||[]).join(',')
     || $('mDue').value!==(c.due||'')
+    || $('mTime').value!==(c.time||'')
     || $('mPriority').value!==(c.priority||'')
     || $('mColumn').value!==c.colId
     || $('mBoard').value!==c.boardId;
@@ -1093,7 +1128,7 @@ $('mSave').onclick=()=>{
   const c=state.cards.find(x=>x.id===editingId); if(!c)return;
   c.title=$('mTitle').value.trim()||c.title; c.details=$('mDetails').value;
   c.tags=$('mTags').value.split(',').map(s=>sanitizeTag(s.trim().replace(/^#/,''))).filter(Boolean);
-  c.due=$('mDue').value; c.priority=$('mPriority').value;
+  c.due=$('mDue').value; c.time=$('mTime').value; c.priority=$('mPriority').value;
   const nb=state.boards.find(x=>x.id===$('mBoard').value);
   if(nb&&nb.id!==c.boardId){
     const col=nb.columns.find(x=>x.id===$('mColumn').value)||nb.columns.find(x=>x.name===(state.boards.find(y=>y.id===c.boardId)?.columns.find(z=>z.id===c.colId)?.name))||nb.columns[0];
@@ -1134,14 +1169,15 @@ function renderCal(){
     g.appendChild(e);
   }
   const list=$('calDay'); list.innerHTML='';
-  const items=(map[calSel]||[]).slice().sort((a,b)=>a.title.localeCompare(b.title));
+  const items=(map[calSel]||[]).slice().sort((a,b)=>(a.time||'99:99')<(b.time||'99:99')?-1:(a.title.localeCompare(b.title)));
   if(!items.length){ list.innerHTML='<span class="muted">No cards due this day.</span>'; return; }
   items.forEach(c=>{
     const b=state.boards.find(x=>x.id===c.boardId);
     const row=document.createElement('div'); row.className='cal-item';
-    row.innerHTML=`<span class="cal-item-t"></span><span class="cal-item-b"></span>`;
-    row.children[0].textContent=c.title;
-    row.children[1].textContent=(b?b.name:'?')+(isOverdue(c.due)?' • overdue':'');
+    row.innerHTML=`<span class="cal-item-tm"></span><span class="cal-item-t"></span><span class="cal-item-b"></span>`;
+    row.children[0].textContent=c.time||'––:––';
+    row.children[1].textContent=c.title;
+    row.children[2].textContent=(b?b.name:'?')+(isOverdue(c.due)?' • overdue':'');
     row.onclick=()=>{ calReturn=true; $('calModal').classList.add('hidden'); state.activeBoardId=c.boardId; save(true); render(); openCardModal(c.id); };
     list.appendChild(row);
   });
@@ -1199,7 +1235,7 @@ $('importGo').onclick=()=>{
     const p=parseFull(raw);
     if(!p.title){ toast('Could not find a title line'); return; }
     if(!confirm(`Import 1 card "${p.title.slice(0,60)}" to ${b.name} → ${b.columns[0].name}?`)) return; // Escape cancels BEFORE anything is created
-    state.cards.unshift({id:uid(),boardId,colId:inbox,title:p.title.slice(0,200),details:p.details,tags:p.tags,priority:p.priority,due:p.due,createdAt:Date.now()});
+    state.cards.unshift({id:uid(),boardId,colId:inbox,title:p.title.slice(0,200),details:p.details,tags:p.tags,priority:p.priority,due:p.due,time:p.time||'',createdAt:Date.now()});
     $('importText').value=''; $('importModal').classList.add('hidden');
     state.activeBoardId=boardId; save(); render();
     toast(`Imported 1 card to ${b.name} ✓`);
@@ -1293,7 +1329,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v64';
+const APP_VER = 'v65';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1515,6 +1551,7 @@ function createMatchdayCard(x){
 /* ——— boot ——— */
 try{
   hideQa(); // composer starts closed behind the FAB; never a dead gap at top
+  backfillTimeOnce();
   render();
   stampSyncLine();
   initCloud();
