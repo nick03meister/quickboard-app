@@ -515,7 +515,14 @@ function dueChip(c){
   return `<span class="${cls}">${label}</span>`;
 }
 let freshCardId=null;
-function markFresh(id){ freshCardId=id; setTimeout(()=>{ if(freshCardId===id) freshCardId=null; },3200); }
+function markFresh(id){ freshCardId=id; setTimeout(()=>{ if(freshCardId===id) freshCardId=null; },6400); }
+function revealFresh(){
+  if(!freshCardId) return;
+  requestAnimationFrame(()=>{
+    const el=document.querySelector(`[data-card-id="${freshCardId}"]`);
+    if(el) el.scrollIntoView({block:'center',inline:'nearest',behavior:'smooth'});
+  });
+}
 function cardNode(c, board, colIdx){
   const d=document.createElement('div');
   d.className='card'; d.draggable=true; d.dataset.cardId=c.id;
@@ -526,7 +533,7 @@ function cardNode(c, board, colIdx){
     <div class="chips">${inAll?`<span class="chip board-chip"></span>`:''}${c.tags.map(t=>`<span class="chip tag-chip" data-tag="${t}" title="Filter by #${t}">#${t}</span>`).join('')}${pri}${dueChip(c)}</div>
     <div class="card-foot"><button class="mini" data-a="edit">Edit</button><button class="mini" data-a="left" title="Move card left">←</button><button class="mini" data-a="right" title="Move card right">→</button><button class="mini${isDone?' done-on':''}" data-a="done" title="${isDone?'Done ✓':'Send card to Done'}">✓</button><button class="mini del" data-a="delcard" title="Delete this card">🗑️</button><button class="mini" data-a="more" title="Open details">•••</button></div>`;
   if(inAll) d.querySelector('.board-chip').textContent='📋 '+board.name;
-  if(c.id===freshCardId){ d.classList.add('fresh'); try{ d.scrollIntoView({block:'nearest',inline:'nearest'}); }catch{} }
+  if(c.id===freshCardId) d.classList.add('fresh');
   d.querySelectorAll('.tag-chip').forEach(el=>{
     if($('filterTag').value===el.dataset.tag) el.classList.add('on');
     el.onclick=(e)=>{ e.stopPropagation(); const ft=$('filterTag'); ft.value=(ft.value===el.dataset.tag)?'':el.dataset.tag; renderBoard(); };
@@ -1207,7 +1214,7 @@ function doQuickAdd(){
   rememberSmart(b.id, tags, priority);
   resetComposer();
   state.activeBoardId=b.id; // jump to the targeted board so you see the card
-  save(); render(); e.t.focus();
+  save(); render(); e.t.focus({preventScroll:true}); revealFresh();
 }
 $('quickAddBtn').onclick=doQuickAdd;
 function autogrowQa(){ const inp=$('quickInput'); inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,132)+'px'; }
@@ -1607,7 +1614,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v76';
+const APP_VER = 'v77';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1823,7 +1830,7 @@ function createMatchdayCard(x){
   });
   state.activeBoardId=board.id;
   markFresh(state.cards[0].id);
-  save(); render();
+  save(); render(); revealFresh();
   alert(`Added to ${board.name} → ${col.name} ✓`);
 }
 
