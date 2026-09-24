@@ -163,6 +163,8 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .cards{padding:0 10px 10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1;min-height:0}
 .card{background:linear-gradient(180deg,#ffffff 0%,#f8f6f3 100%);border:1px solid rgba(28,10,10,.09);border-radius:14px;padding:12px;box-shadow:0 1px 3px rgba(28,10,10,.08),0 4px 12px rgba(28,10,10,.05);cursor:grab;transition:box-shadow .15s ease,transform .1s ease;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:pan-y}
 .card:hover{box-shadow:0 2px 6px rgba(28,10,10,.1),0 8px 20px rgba(28,10,10,.08)}
+.card.fresh{animation:freshGlow 2.8s ease-out}
+@keyframes freshGlow{0%{box-shadow:0 0 0 3px rgba(255,184,28,.95),0 0 26px rgba(218,41,28,.55)}70%{box-shadow:0 0 0 2px rgba(255,184,28,.35),0 0 10px rgba(218,41,28,.2)}100%{box-shadow:0 1px 3px rgba(28,10,10,.08),0 4px 12px rgba(28,10,10,.05)}}
 .card:active{cursor:grabbing}
 .card.dragging{opacity:.5;border-style:dashed}
 .card-title{font-weight:650;font-size:14px;line-height:1.35}
@@ -224,7 +226,7 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .modal-card{background:#fff;border-radius:16px;padding:16px;width:100%;max-width:520px;max-height:90vh;overflow:auto;animation:popIn .2s cubic-bezier(.16,1,.3,1)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes popIn{from{opacity:0;transform:scale(.98) translateY(8px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.modal,.modal-card,.united-bar.open,.sel-bar,.toast{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){.modal,.modal-card,.united-bar.open,.sel-bar,.toast,.card.fresh{animation:none!important;transition:none!important}}
 .modal-card.wide{max-width:680px}
 .danger-card{border:3px solid #b91c1c;box-shadow:0 0 0 6px rgba(185,28,28,.15),0 24px 64px rgba(185,28,28,.3)}
 .danger-card h3{color:#b91c1c;font-size:20px}
