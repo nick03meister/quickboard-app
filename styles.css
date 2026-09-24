@@ -182,7 +182,21 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .card-details li.md-todo.done span:last-child{text-decoration:line-through}
 .card-details li.md-todo .tick-pop{animation:tickGlow .9s ease-out}
 @keyframes tickGlow{0%{box-shadow:0 0 0 0 rgba(22,163,74,.75)}100%{box-shadow:0 0 0 12px rgba(22,163,74,0)}}
-.card.expanded .card-details{-webkit-line-clamp:unset;display:block;max-height:38vh;overflow-y:auto}
+.view-body{font-size:14px;color:#1c0a0a;max-height:56vh;overflow-y:auto;line-height:1.55}
+.view-body .md-p{margin:0 0 6px}
+.view-body .md-h{font-weight:800;margin:8px 0 4px;font-size:15px}
+.view-body ul.md-list,.view-body ol.md-list{margin:4px 0;padding-left:24px}
+.view-body li{margin:3px 0}
+.view-body li.md-todo{list-style:none;margin-left:-24px;display:flex;gap:9px;align-items:flex-start;cursor:pointer;border-radius:8px;padding:3px 4px}
+.view-body li.md-todo:hover{background:rgba(218,41,28,.07)}
+.view-body .tick{flex:0 0 auto;width:20px;height:20px;margin-top:1px;border-radius:50%;border:2px solid #b91c1c;background:#fff;position:relative}
+.view-body li.md-todo.done .tick{background:#16a34a;border-color:#16a34a}
+.view-body li.md-todo.done .tick::after{content:'✓';color:#fff;font-size:13px;font-weight:900;position:absolute;inset:0;display:grid;place-items:center;line-height:1}
+.view-body li.md-todo.done{color:#8a8a8a}
+.view-body li.md-todo.done span:last-child{text-decoration:line-through}
+.view-body .tick-pop{animation:tickGlow .9s ease-out}
+.view-body code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:12.5px}
+.view-body a{color:#b81d12;font-weight:600}
 .card-details code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:12px}
 .todo-toggle{margin-top:6px;font-size:12px;font-weight:700;color:#b81d12;background:rgba(218,41,28,.07);border:1px solid rgba(218,41,28,.22);border-radius:999px;padding:3px 12px;cursor:pointer}
 .todo-toggle:hover{background:rgba(218,41,28,.14)}

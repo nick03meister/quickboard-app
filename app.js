@@ -557,6 +557,37 @@ function formatDetails(text, cardId){
   close();
   return html;
 }
+function wireDetails(box, c){
+  box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); });
+  box.querySelectorAll('.md-todo').forEach(li=>{ li.title='Tap to tick/untick'; li.onclick=(e)=>{ e.stopPropagation(); if(selectMode) return; toggleTodo(c.id, +li.dataset.ln); if(!$('viewModal').classList.contains('hidden')&&viewingId===c.id) openCardView(c.id,true); }; });
+}
+let viewingId=null;
+function openCardView(id, keepOpen){
+  const c=state.cards.find(x=>x.id===id); if(!c)return;
+  viewingId=id;
+  const b=state.boards.find(x=>x.id===c.boardId);
+  const bits=[];
+  if(b) bits.push(`<span class="chip board-chip">📋 ${b.name}</span>`);
+  (c.tags||[]).forEach(t=>bits.push(`<span class="chip">#${t}</span>`));
+  if(c.priority) bits.push(`<span class="chip pri-${c.priority}">${c.priority==='high'?'🔴 high':c.priority==='med'?'🟡 med':'🟢 low'}</span>`);
+  if(c.due||c.time) bits.push(`<span class="chip">📅 ${[c.due?fmtDate(c.due):'',c.time||''].filter(Boolean).join(' · ')}</span>`);
+  const td=countTodos(c.details);
+  if(td.total>0) bits.push(`<span class="chip">○ ${td.done}/${td.total} todos</span>`);
+  $('viewMeta').innerHTML=bits.join('');
+  $('viewTitle').textContent=c.title;
+  const body=$('viewBody');
+  body.innerHTML=c.details?formatDetails(c.details, c.id):'<i style="color:#8a8a8a">No details — tap Edit to add some.</i>';
+  wireDetails(body, c);
+  if(!keepOpen) $('viewModal').classList.remove('hidden');
+}
+$('viewClose').onclick=()=>{ viewingId=null; $('viewModal').classList.add('hidden'); };
+$('viewEdit').onclick=()=>{ const id=viewingId; viewingId=null; $('viewModal').classList.add('hidden'); if(id) openCardModal(id); };
+$('viewDelete').onclick=()=>{
+  const c=state.cards.find(x=>x.id===viewingId); if(!c) return;
+  if(!confirm(`Delete card "${c.title}"?`))return;
+  tombstoneCards([c.id]); state.cards=state.cards.filter(x=>x.id!==c.id);
+  viewingId=null; $('viewModal').classList.add('hidden'); save(); render();
+};
 let justTicked=null;
 function toggleTodo(cardId, ln){
   const c=state.cards.find(x=>x.id===cardId); if(!c||!c.details) return;
@@ -602,16 +633,7 @@ function cardNode(c, board, colIdx){
     el.onclick=(e)=>{ e.stopPropagation(); const ft=$('filterTag'); ft.value=(ft.value===el.dataset.tag)?'':el.dataset.tag; renderBoard(); };
   });
   d.querySelector('.card-title').textContent=c.title;
-  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details, c.id); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); box.querySelectorAll('.md-todo').forEach(li=>{ li.title='Tap to tick/untick'; li.onclick=(e)=>{ e.stopPropagation(); if(selectMode) return; toggleTodo(c.id, +li.dataset.ln); }; });
-    const td=countTodos(c.details), long=c.details.split(/\r?\n/).length>4;
-    if(td.total>0||long){
-      const tg=document.createElement('button'); tg.className='todo-toggle'; tg.title='Expand full details on the card';
-      const paint=()=>{ const t2=countTodos(c.details); tg.textContent = t2.total>0 ? `${d.classList.contains('expanded')?'▾':'▸'} ○ ${t2.done}/${t2.total} todos` : (d.classList.contains('expanded')?'▾ less':'▸ more'); };
-      paint();
-      tg.onclick=(e)=>{ e.stopPropagation(); d.classList.toggle('expanded'); paint(); };
-      box.after(tg);
-    }
-  }
+  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details, c.id); wireDetails(box, c); }
   if(selectMode&&selected.has(c.id)) d.classList.add('selected');
   // escape tag chips already safe (tags sanitized lowercase alnum)
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
@@ -678,7 +700,7 @@ function cardNode(c, board, colIdx){
   d.onclick=()=>{
     if(clickSupp){ clickSupp=false; return; } // lift after hold/drag must not open or toggle
     if(selectMode){ selected.has(c.id)?selected.delete(c.id):selected.add(c.id); d.classList.toggle('selected',selected.has(c.id)); renderSelBar(); }
-    else openCardModal(c.id);
+    else openCardView(c.id);
   };
   d.querySelector('[data-a="left"]').onclick=(e)=>{e.stopPropagation();moveCard(c,-1);};
   d.querySelector('[data-a="right"]').onclick=(e)=>{e.stopPropagation();moveCard(c,1);};
@@ -1314,6 +1336,7 @@ document.addEventListener('keydown',(e)=>{
     const cm=$('cardModal');
     if(cm&&!cm.classList.contains('hidden')) attemptCloseCard();
     document.querySelectorAll('.modal').forEach(m=>{ if(m.id!=='cardModal') m.classList.add('hidden'); });
+    viewingId=null;
   }
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){ e.preventDefault(); doUndo(); }
 });
@@ -1693,7 +1716,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v80';
+const APP_VER = 'v81';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
