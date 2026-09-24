@@ -33,7 +33,7 @@ function defaultState(){
     {id:uid(), boardId:b3, colId:boards[2].columns[0].id, title:'Onboarding template: VPN + laptop + accounts', details:'- Get VPN\n- Laptop setup\n- Email / Slack / GitHub access', tags:['onboarding'], priority:'high', due:'', createdAt:Date.now()},
     {id:uid(), boardId:b4, colId:boards[3].columns[0].id, title:'Example: WiFi hint (not real secret)', details:'Hint only — real passwords in Keychain/1Password.', tags:['creds'], priority:'', due:'', createdAt:Date.now()},
   ];
-  return {boards, cards, activeBoardId:b1};
+  return {boards, cards, activeBoardId:b1, deleted:{}, deletedBoards:{}};
 }
 
 let state = load();
@@ -57,8 +57,64 @@ function load(){
     const s = JSON.parse(raw);
     if(!s.boards || !s.cards) return defaultState();
     if(!s.activeBoardId) s.activeBoardId = s.boards[0]?.id;
+    if(!s.deleted || typeof s.deleted!=='object') s.deleted={};
+    if(!s.deletedBoards || typeof s.deletedBoards!=='object') s.deletedBoards={};
     return s;
   }catch{ return defaultState(); }
+}
+/* ——— delete tombstones: lets real deletes converge instead of resurrecting ——— */
+function tombstoneCards(ids){
+  const now=Date.now();
+  state.deleted=state.deleted||{};
+  (ids||[]).forEach(id=>{ if(id) state.deleted[id]=now; });
+  pruneTombs();
+}
+function tombstoneBoards(ids){
+  const now=Date.now();
+  state.deletedBoards=state.deletedBoards||{};
+  (ids||[]).forEach(id=>{ if(id) state.deletedBoards[id]=now; });
+  pruneTombs();
+}
+// full-replace paths (import / force-pull / restore / wipe): everything vanishing is an intended delete
+function tombstoneMissing(oldCards, newCards, oldBoards, newBoards){
+  const now=Date.now();
+  state.deleted=state.deleted||{}; state.deletedBoards=state.deletedBoards||{};
+  const nc=new Set((newCards||[]).map(c=>c&&c.id)), nb=new Set((newBoards||[]).map(b=>b&&b.id));
+  (oldCards||[]).forEach(c=>{ if(c&&c.id&&!nc.has(c.id)) state.deleted[c.id]=now; });
+  (oldBoards||[]).forEach(b=>{ if(b&&b.id&&!nb.has(b.id)) state.deletedBoards[b.id]=now; });
+  pruneTombs();
+}
+function pruneTombs(){
+  try{
+    const cut=Date.now()-45*24*3600*1000;
+    for(const k of ['deleted','deletedBoards']){
+      const m=state[k]||{}, rest=Object.keys(m).sort((a,b)=>m[a]-m[b]);
+      rest.forEach(id=>{ if(!m[id]||m[id]<cut) delete m[id]; });
+      const ks=Object.keys(m).sort((a,b)=>m[a]-m[b]);
+      while(ks.length>500) delete m[ks.shift()];
+      state[k]=m;
+    }
+  }catch{}
+}
+// adopt their tombstones + drop what they deleted; returns true if local changed
+function applyTombsToLocal(remote){
+  if(!remote) return false;
+  const rd=remote.deleted||{}, rdb=remote.deletedBoards||{};
+  const bc=state.cards.length, bb=state.boards.length;
+  const hadL=JSON.stringify(state.deleted||{}), hadLB=JSON.stringify(state.deletedBoards||{});
+  if(Object.keys(rd).length) state.cards=state.cards.filter(c=>!rd[c.id]);
+  if(Object.keys(rdb).length){
+    state.boards=state.boards.filter(b=>!rdb[b.id]);
+    state.cards=state.cards.filter(c=>!rdb[c.boardId]);
+    if(!state.boards.find(b=>b.id===state.activeBoardId)) state.activeBoardId=state.boards[0]?.id;
+  }
+  state.deleted={...(state.deleted||{})};
+  for(const id in rd){ if(!state.deleted[id]||rd[id]>state.deleted[id]) state.deleted[id]=rd[id]; }
+  state.deletedBoards={...(state.deletedBoards||{})};
+  for(const id in rdb){ if(!state.deletedBoards[id]||rdb[id]>state.deletedBoards[id]) state.deletedBoards[id]=rdb[id]; }
+  pruneTombs();
+  return state.cards.length!==bc || state.boards.length!==bb
+    || JSON.stringify(state.deleted)!==hadL || JSON.stringify(state.deletedBoards)!==hadLB;
 }
 function healState(){
   // Remap cards pointing at deleted columns into the board's first column
@@ -107,6 +163,12 @@ function doUndo(){
   takeSnapshot('pre-undo'); // worst-case safety net in backups
   try{ state=JSON.parse(prev); }catch{ toast('Undo failed'); return; }
   if(!state.activeBoardId) state.activeBoardId=state.boards[0]?.id;
+  // undo may resurrect deleted ids — clear their tombstones so sync keeps them
+  try{
+    const cids=new Set((state.cards||[]).map(c=>c.id)), bids=new Set((state.boards||[]).map(b=>b.id));
+    for(const id of Object.keys(state.deleted||{})) if(cids.has(id)) delete state.deleted[id];
+    for(const id of Object.keys(state.deletedBoards||{})) if(bids.has(id)) delete state.deletedBoards[id];
+  }catch{}
   healState(); save(true,true); render(); refreshUndoBtn();
   toast('Undone ✓');
 }
@@ -266,6 +328,7 @@ $('selNoneBtn').onclick=()=>{ selected.clear(); renderSelBar(); render(); };
 $('selDelBtn').onclick=()=>{
   if(!selected.size) return;
   if(!confirm(`Delete ${selected.size} card${selected.size>1?'s':''}? (Undo available)`)) return;
+  tombstoneCards([...selected]);
   state.cards=state.cards.filter(c=>!selected.has(c.id));
   selected.clear(); setSelectMode(false); save(); render();
   toast('Deleted ✓ — Undo available');
@@ -349,7 +412,7 @@ function renderTabs(){
           title:`Delete board "${b.name}"?`,
           desc:`This removes the board and its ${n} card${n===1?'':'s'} on ALL synced devices. A safety backup is saved first — restore it from Sync settings if this was a mistake.`,
           word:(b.name||'DELETE').toUpperCase(), goLabel:'Delete board',
-          action:()=>{ state.boards = state.boards.filter(z=>z.id!==b.id); state.cards = state.cards.filter(c=>c.boardId!==b.id); state.activeBoardId = state.boards[0]?.id; save(); render(); }
+          action:()=>{ tombstoneBoards([b.id]); tombstoneCards(state.cards.filter(c=>c.boardId===b.id).map(c=>c.id)); state.boards = state.boards.filter(z=>z.id!==b.id); state.cards = state.cards.filter(c=>c.boardId!==b.id); state.activeBoardId = state.boards[0]?.id; save(); render(); }
         });
       };
       btn.appendChild(x);
@@ -611,7 +674,7 @@ function cardNode(c, board, colIdx){
   d.querySelector('[data-a="left"]').onclick=(e)=>{e.stopPropagation();moveCard(c,-1);};
   d.querySelector('[data-a="right"]').onclick=(e)=>{e.stopPropagation();moveCard(c,1);};
   d.querySelector('[data-a="done"]').onclick=(e)=>{e.stopPropagation();const cols=board.columns;const last=cols[cols.length-1];c.colId=last.id;save();render();};
-  d.querySelector('[data-a="delcard"]').onclick=(e)=>{e.stopPropagation();if(!confirm(`Delete card "${c.title}"?`))return;state.cards=state.cards.filter(x=>x.id!==c.id);save();render();};
+  d.querySelector('[data-a="delcard"]').onclick=(e)=>{e.stopPropagation();if(!confirm(`Delete card "${c.title}"?`))return;tombstoneCards([c.id]);state.cards=state.cards.filter(x=>x.id!==c.id);save();render();};
   return d;
 }
 function moveCard(c, dir){
@@ -693,7 +756,10 @@ function renderBackups(){
     const btn=document.createElement('button'); btn.className='btn small'; btn.textContent='Restore';
     btn.onclick=()=>{
       takeSnapshot('pre-restore');
+      tombstoneMissing(state.cards, s.state.cards, state.boards, s.state.boards);
+      const d={...state.deleted}, db={...state.deletedBoards}; // carry tombstones into the restored copy
       state=s.state; state.activeBoardId=state.activeBoardId||state.boards[0]?.id;
+      state.deleted={...(state.deleted||{}), ...d}; state.deletedBoards={...(state.deletedBoards||{}), ...db};
       healState(); save(); render(); renderBackups();
       alert('Backup restored ✓ (previous state saved as newest backup)');
     };
@@ -1310,6 +1376,7 @@ $('mSave').onclick=()=>{
 };
 $('mDelete').onclick=()=>{
   if(!confirm('Delete this card?'))return;
+  tombstoneCards([editingId]);
   state.cards=state.cards.filter(x=>x.id!==editingId);
   calReturn=false; $('cardModal').classList.add('hidden'); save(); render();
 };
@@ -1534,7 +1601,7 @@ $('importFile').addEventListener('change',(e)=>{
   r.onload=()=>{
     try{
       const j=JSON.parse(r.result);
-      if(j.boards&&j.cards){ takeSnapshot('pre-import'); if(!confirm('Replace ALL data with this backup? (current state auto-saved first)'))return; state=j; if(!state.activeBoardId)state.activeBoardId=state.boards[0].id; save(); render(); }
+      if(j.boards&&j.cards){ takeSnapshot('pre-import'); if(!confirm('Replace ALL data with this backup? (current state auto-saved first)'))return; tombstoneMissing(state.cards, j.cards, state.boards, j.boards); const d={...state.deleted}, db={...state.deletedBoards}; state=j; state.deleted={...(state.deleted||{}), ...d}; state.deletedBoards={...(state.deletedBoards||{}), ...db}; if(!state.activeBoardId)state.activeBoardId=state.boards[0].id; save(); render(); }
       else alert('Not a QuickBoard JSON backup');
     }catch{ // treat as text lines
       $('importText').value=r.result.slice(0,20000);
@@ -1562,7 +1629,10 @@ $('forcePullBtn').onclick=()=>{
         const remote=doc.data().state;
         if(!remote||!remote.boards||!remote.boards.length){ alert('Cloud copy is empty — nothing to restore.'); return; }
         takeSnapshot('pre-restore');
+        tombstoneMissing(state.cards, remote.cards, state.boards, remote.boards);
+        const d={...state.deleted}, db={...state.deletedBoards};
         state=remote; state.activeBoardId=state.activeBoardId||state.boards[0]?.id;
+        state.deleted={...(state.deleted||{}), ...d}; state.deletedBoards={...(state.deletedBoards||{}), ...db};
         healState(); save(true); render();
         alert(`Restored ${state.boards.length} boards, ${state.cards.length} cards ✓`);
       }).catch(()=>alert('Restore failed — check connection.'));
@@ -1588,13 +1658,13 @@ $('wipeBtn').onclick=()=>askDanger({
   title:'⚠️ Reset ALL data?',
   desc:'This permanently deletes every board and card on ALL synced devices. A safety backup is saved on this device first — but be sure.',
   word:'RESET', goLabel:'Reset everything',
-  action:()=>{ takeSnapshot('pre-wipe'); state=defaultState(); save(); render(); renderBackups(); }
+  action:()=>{ takeSnapshot('pre-wipe'); tombstoneMissing(state.cards,[],state.boards,[]); const d={...state.deleted}, db={...state.deletedBoards}; state=defaultState(); state.deleted=d; state.deletedBoards=db; save(); render(); renderBackups(); }
 });
 $('seedBtn').onclick=()=>askDanger({
   title:'Replace everything with demo boards?',
   desc:'This replaces ALL boards and cards on this device with the demo set. A safety backup is saved first — restore it from the list below if this was a mistake.',
   word:'SEED', goLabel:'Replace with demo',
-  action:()=>{ takeSnapshot('pre-seed'); state=defaultState(); save(); render(); renderBackups(); }
+  action:()=>{ takeSnapshot('pre-seed'); tombstoneMissing(state.cards,[],state.boards,[]); const d={...state.deleted}, db={...state.deletedBoards}; state=defaultState(); state.deleted=d; state.deletedBoards=db; save(); render(); renderBackups(); }
 });
 $('saveFirebase').onclick=()=>{
   const v=$('firebaseConfig').value.trim();
@@ -1614,7 +1684,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v77';
+const APP_VER = 'v78';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1649,19 +1719,24 @@ function applyRemote(data){
     pushToCloud(); // heal cloud with the good local copy
     return false;
   }
+  // adopt their delete records first — legit deletes converge even if the rest is held below
+  if(applyTombsToLocal(remote)){ try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch{} render(); }
   if(localStorage.getItem(LS_KEY)===JSON.stringify(remote)) { lastSyncAt=Date.now(); stampSyncLine(); return true; }
   if((data.updatedAt||0) > (state._ts||0)){
-    const remoteBoards=(remote.boards||[]).length, localBoards=(state.boards||[]).length;
-    const remoteCards=((remote.cards)||[]).length, localCards=(state.cards||[]).length;
-    // Destructive direction guard: cloud with FEWER boards or FEWER cards never auto-wipes
-    // local data (a fresh/stale device pushing defaults used to nuke renamed boards everywhere).
-    // Convergence then needs a manual, type-confirmed Force-pull. Card edits still flow.
-    if(remoteBoards < localBoards || remoteCards < localCards){
-      console.warn(`sync: held — cloud has ${remoteBoards} boards/${remoteCards} cards, local has ${localBoards}/${localCards}; keeping local`);
+    // Tombstoned deletes are legitimate even when they shrink the counts —
+    // only hold on UNEXPLAINED loss (missing locally-held ids with no delete record,
+    // e.g. a fresh device pushing defaults over renamed boards).
+    const rIds=new Set((remote.cards||[]).map(c=>c&&c.id));
+    const rBids=new Set((remote.boards||[]).map(b=>b&&b.id));
+    const rDel=remote.deleted||{}, rDelB=remote.deletedBoards||{};
+    const goneCards=(state.cards||[]).filter(c=>!rIds.has(c.id)&&!rDel[c.id]);
+    const goneBoards=(state.boards||[]).filter(b=>!rBids.has(b.id)&&!rDelB[b.id]);
+    if(goneCards.length||goneBoards.length){
+      console.warn(`sync: held — cloud lacks ${goneCards.length} card(s)/${goneBoards.length} board(s) with no delete record; keeping local`);
       const now=Date.now();
       if(!applyRemote._heldAt || now-applyRemote._heldAt>10*60*1000){
         applyRemote._heldAt=now;
-        toast('Sync held: cloud is missing data — kept yours. Use Force-pull to converge.');
+        toast('Sync held: cloud is missing data with no delete record — kept yours. Use Force-pull to converge.');
       }
       lastSyncAt=Date.now(); stampSyncLine();
       return false;
