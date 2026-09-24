@@ -516,6 +516,14 @@ function renderBoard(){
 function fmtDate(iso){ const m=/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(iso||''); return m?`${m[3]}-${m[2]}-${m[1]}`:(iso||''); }
 /* ——— tiny markdown for card details (stored plain, rendered safe) ——— */
 function escapeHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function countTodos(text){
+  let total=0, done=0;
+  for(const line of (text||'').split(/\r?\n/)){
+    const m=/^\s*[-*]\s*\[([ xX])\]/.exec(line);
+    if(m){ total++; if(/x/i.test(m[1])) done++; }
+  }
+  return {total, done};
+}
 function fmtInline(s){
   s = escapeHtml(s);
   s = s.replace(/`([^`\n]+)`/g,'<code>$1</code>');
@@ -594,7 +602,16 @@ function cardNode(c, board, colIdx){
     el.onclick=(e)=>{ e.stopPropagation(); const ft=$('filterTag'); ft.value=(ft.value===el.dataset.tag)?'':el.dataset.tag; renderBoard(); };
   });
   d.querySelector('.card-title').textContent=c.title;
-  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details, c.id); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); box.querySelectorAll('.md-todo').forEach(li=>{ li.title='Tap to tick/untick'; li.onclick=(e)=>{ e.stopPropagation(); if(selectMode) return; toggleTodo(c.id, +li.dataset.ln); }; }); }
+  if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details, c.id); box.querySelectorAll('a').forEach(a=>{ a.setAttribute('draggable','false'); a.onclick=(e)=>e.stopPropagation(); }); box.querySelectorAll('.md-todo').forEach(li=>{ li.title='Tap to tick/untick'; li.onclick=(e)=>{ e.stopPropagation(); if(selectMode) return; toggleTodo(c.id, +li.dataset.ln); }; });
+    const td=countTodos(c.details), long=c.details.split(/\r?\n/).length>4;
+    if(td.total>0||long){
+      const tg=document.createElement('button'); tg.className='todo-toggle'; tg.title='Expand full details on the card';
+      const paint=()=>{ const t2=countTodos(c.details); tg.textContent = t2.total>0 ? `${d.classList.contains('expanded')?'▾':'▸'} ○ ${t2.done}/${t2.total} todos` : (d.classList.contains('expanded')?'▾ less':'▸ more'); };
+      paint();
+      tg.onclick=(e)=>{ e.stopPropagation(); d.classList.toggle('expanded'); paint(); };
+      box.after(tg);
+    }
+  }
   if(selectMode&&selected.has(c.id)) d.classList.add('selected');
   // escape tag chips already safe (tags sanitized lowercase alnum)
   d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
@@ -1676,7 +1693,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v79';
+const APP_VER = 'v80';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

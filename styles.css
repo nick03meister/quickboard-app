@@ -182,7 +182,10 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .card-details li.md-todo.done span:last-child{text-decoration:line-through}
 .card-details li.md-todo .tick-pop{animation:tickGlow .9s ease-out}
 @keyframes tickGlow{0%{box-shadow:0 0 0 0 rgba(22,163,74,.75)}100%{box-shadow:0 0 0 12px rgba(22,163,74,0)}}
+.card.expanded .card-details{-webkit-line-clamp:unset;display:block;max-height:38vh;overflow-y:auto}
 .card-details code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:12px}
+.todo-toggle{margin-top:6px;font-size:12px;font-weight:700;color:#b81d12;background:rgba(218,41,28,.07);border:1px solid rgba(218,41,28,.22);border-radius:999px;padding:3px 12px;cursor:pointer}
+.todo-toggle:hover{background:rgba(218,41,28,.14)}
 .card-details a{color:#b81d12;font-weight:600}
 .md-bar{display:flex;gap:6px;margin:4px 0 8px;flex-wrap:wrap}
 .md-bar button{font-size:13px;font-weight:700;min-width:36px;border:1px solid var(--line);background:#f8fafc;border-radius:9px;padding:5px 10px;cursor:pointer;color:#1c0a0a}
