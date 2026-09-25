@@ -506,3 +506,47 @@ body:has(#quickadd:not(.hidden)) .fab,body:has(.modal:not(.hidden)) .fab,body:ha
   .card-foot [data-a="right"]{display:none}
   .board{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
 }
+/* Filters toggle exists only on mobile */
+.ta-toggle,.ta-toggle-btn{display:none}
+/* ═══ MOBILE PASS 2 (from screen-recording review) — overrides above ═══ */
+@media (max-width:820px){
+/* 1. Fixed-height app shell: lanes scroll inside themselves, page never jumps */
+html,body{height:100dvh;min-height:0;overflow:hidden}
+.topbar,.boardbar,.footer,.creds-banner{flex:0 0 auto}
+.boardbar{position:relative}
+.board{flex:1 1 0;min-height:0;align-items:stretch;overflow-y:hidden;padding:12px 14px 10px}
+.col{height:100%;max-height:100%}
+.cards{overscroll-behavior:contain;padding-bottom:14px}
+.cards:empty::before{content:"Nothing here yet";display:grid;place-items:center;min-height:120px;color:#a89b99;font-size:14px}
+.add-inline{margin-right:84px}
+.footer{padding:6px 14px calc(6px + env(safe-area-inset-bottom));flex-wrap:wrap}
+.footer>.dot:nth-child(4),.footer>span:nth-child(5){display:none}
+.fab{bottom:calc(52px + env(safe-area-inset-bottom))}
+.united-bar.open{bottom:calc(124px + env(safe-area-inset-bottom))}
+.toast{bottom:calc(124px + env(safe-area-inset-bottom))}
+
+/* 2. Filters + tools tucked behind one button; fade hints on scroll rows */
+.ta-toggle-btn{display:inline-flex;align-items:center;flex:0 0 auto;min-height:var(--tap);padding:0 16px;border-radius:999px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.14);color:#fff;font-size:15px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ta-toggle:checked~.ta-find .ta-toggle-btn{background:#fff;color:#b81d12}
+.top-actions:has(#clearFilters:not(.hidden)) .ta-toggle-btn::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--gold);margin-left:8px}
+.ta-toggle:not(:checked)~.ta-filters,.ta-toggle:not(:checked)~.ta-more{display:none}
+.ta-filters,.ta-more{-webkit-mask-image:linear-gradient(90deg,#000 88%,transparent);mask-image:linear-gradient(90deg,#000 88%,transparent)}
+
+/* 3. Board tabs: readable active state, delete set apart from reorder/rename */
+.board-tab.active{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.board-tab .cnt{opacity:.9!important}
+.board-tab .rn{font-size:18px;min-width:40px;margin:0}
+.board-tab .x{font-size:20px;margin:0 0 0 10px;padding-left:6px;border-left:1px solid rgba(255,255,255,.45)}
+
+/* 4. Sheets slide only (no see-through fade) */
+@keyframes sheetSlide{from{transform:translateY(22%)}to{transform:none}}
+.modal-card,.composer{animation:sheetSlide .26s cubic-bezier(.16,1,.3,1)}
+
+/* 6/7. Composer clarity */
+.cmp-field:has(input[type=date])::before{content:"Due";font-weight:700;color:#8a6d6d;font-size:14px}
+.cmp-field:has(input[type=time])::before{content:"Time";font-weight:700;color:#8a6d6d;font-size:14px}
+.cmp-foot .btn.primary:disabled{opacity:1;background:#e9dedc;border-color:#dccfcf;color:#8a7a78;box-shadow:none}
+
+/* 8. Lane header: delete de-emphasised (still tappable) */
+.col-actions .mini.del{background:transparent;border-color:transparent;color:#8a6d6d;font-weight:600;margin-left:auto}
+}
