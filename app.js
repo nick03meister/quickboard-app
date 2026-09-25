@@ -1786,7 +1786,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v91';
+const APP_VER = 'v92';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)
@@ -1929,8 +1929,6 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState==='visible' && window._qbDb){ listenCloud(); pullFromCloud(true); }
 });
 window.addEventListener('online', ()=>{ listenCloud(); pullFromCloud(true); });
-// collapse header rows on scroll (mobile): brand + filters + tools hide, search stays
-window.addEventListener('scroll',()=>{ document.body.classList.toggle('hd-compact',(window.scrollY||0)>110); },{passive:true});
 window.addEventListener('focus', ()=>{ if(window._qbDb) pullFromCloud(true); });
 /* ——— Manchester United fixtures (live via OpenLigaDB, free, no key) ——— */
 const UTD_API = 'https://api.openligadb.de/getmatchdata/pl/2026';
