@@ -353,29 +353,36 @@ function renderTabs(){
     btn.dataset.boardId = b.id;
     btn.innerHTML = `<span></span> <span class="cnt" style="opacity:.6;font-weight:400">(${n})</span>`;
     btn.firstChild.textContent = b.name;
-    btn.title = `${b.name} — ${p}% in Done (double-click or ✏️ to rename)`;
+    btn.title = `${b.name} — ${p}% in Done (⋯ menu: rename, reorder, delete)`;
     btn.onclick = ()=>{ state.activeBoardId=b.id; save(true); render(); };
     btn.ondblclick = ()=>{
       const nn = prompt('Rename board:', b.name);
       if(nn && nn.trim()){ b.name = nn.trim().slice(0,40); save(); render(); }
     };
-    // explicit rename (dblclick alone can't work: first click re-renders tabs, so the 2nd click never completes one)
-    const pen = document.createElement('span');
-    pen.className='rn'; pen.textContent='✏️'; pen.title='Rename board';
-    pen.onclick=(e)=>{ e.stopPropagation(); const nn=prompt('Rename board:',b.name); if(nn&&nn.trim()){ b.name=nn.trim().slice(0,40); save(); render(); } };
-    btn.appendChild(pen);
-    // steppers on the active tab: reorder boards (touch-friendly)
-    if(b.id===state.activeBoardId&&state.boards.length>1){
-      const idx=state.boards.findIndex(z=>z.id===b.id);
-      const mk=(t,dir)=>{ const s=document.createElement('span'); s.className='rn'; s.textContent=t; s.title=t==='‹'?'Move board left':'Move board right';
-        s.onclick=(e)=>{ e.stopPropagation(); const j=idx+dir; if(j<0||j>=state.boards.length) return;
-          const arr=state.boards; const [mv]=arr.splice(idx,1); arr.splice(j,0,mv); save(); render(); }; return s; };
-      if(idx>0) btn.insertBefore(mk('‹',-1),btn.firstChild);
-      btn.appendChild(mk('›',1));
-    }
+    // ⋯ board menu (rename / reorder / delete) — keeps tabs compact; delete stays type-confirmed
+    const idx0=state.boards.findIndex(z=>z.id===b.id);
+    const menu = document.createElement('span');
+    menu.className='rn'; menu.textContent='⋯'; menu.title='Board options';
+    menu.onclick=(e)=>{ e.stopPropagation(); colMenu(e.currentTarget,[
+      {label:'Rename board', fn:()=>{ const nn=prompt('Rename board:',b.name); if(nn&&nn.trim()){ b.name=nn.trim().slice(0,40); save(); render(); } }},
+      ...(idx0>0?[{label:'Move board left', fn:()=>{ const arr=state.boards; const [mv]=arr.splice(idx0,1); arr.splice(idx0-1,0,mv); save(); render(); }}]:[]),
+      ...(idx0<state.boards.length-1?[{label:'Move board right', fn:()=>{ const arr=state.boards; const [mv]=arr.splice(idx0,1); arr.splice(idx0+1,0,mv); save(); render(); }}]:[]),
+      ...(state.boards.length>1?[{label:'Delete board', danger:true, fn:()=>{
+        const n=state.cards.filter(c=>c.boardId===b.id).length;
+        takeSnapshot('pre-board-delete');
+        askDanger({
+          title:`Delete board "${b.name}"?`,
+          desc:`This removes the board and its ${n} card${n===1?'':'s'} on ALL synced devices. A safety backup is saved first — restore it from Sync settings if this was a mistake.`,
+          word:(b.name||'DELETE').toUpperCase(), goLabel:'Delete board',
+          action:()=>{ tombstoneBoards([b.id]); tombstoneCards(state.cards.filter(c=>c.boardId===b.id).map(c=>c.id)); state.boards = state.boards.filter(z=>z.id!==b.id); state.cards = state.cards.filter(c=>c.boardId!==b.id); state.activeBoardId = state.boards[0]?.id; save(); render(); }
+        });
+      }}]:[]),
+    ]); };
+    btn.appendChild(menu);
     // desktop DnD on tabs: board-reorder (board payload) AND card-move (card payload)
     btn.draggable=true;
-    btn.ondragstart=(e)=>{ e.dataTransfer.setData('text/board-id',b.id); };
+    btn.ondragstart=(e)=>{ e.dataTransfer.setData('text/board-id',b.id); window._qbDragging=true; };
+    btn.ondragend=()=>{ window._qbDragging=false; };
     btn.ondragover=(e)=>{ e.preventDefault(); btn.classList.add('drag-over'); };
     btn.ondragleave=()=>btn.classList.remove('drag-over');
     btn.ondrop=(e)=>{
@@ -387,21 +394,6 @@ function renderTabs(){
       if(from<0||to<0) return;
       const [mv]=arr.splice(from,1); arr.splice(to,0,mv); save(); render();
     };
-    if(state.boards.length>1){
-      const x = document.createElement('span');
-      x.className='x'; x.textContent='×'; x.title='Delete board';
-      x.onclick=(e)=>{ e.stopPropagation(); if(state.boards.length<=1){ alert('Keep at least 1 board.'); return; }
-        const n=state.cards.filter(c=>c.boardId===b.id).length;
-        takeSnapshot('pre-board-delete');
-        askDanger({
-          title:`Delete board "${b.name}"?`,
-          desc:`This removes the board and its ${n} card${n===1?'':'s'} on ALL synced devices. A safety backup is saved first — restore it from Sync settings if this was a mistake.`,
-          word:(b.name||'DELETE').toUpperCase(), goLabel:'Delete board',
-          action:()=>{ tombstoneBoards([b.id]); tombstoneCards(state.cards.filter(c=>c.boardId===b.id).map(c=>c.id)); state.boards = state.boards.filter(z=>z.id!==b.id); state.cards = state.cards.filter(c=>c.boardId!==b.id); state.activeBoardId = state.boards[0]?.id; save(); render(); }
-        });
-      };
-      btn.appendChild(x);
-    }
     tabsEl.appendChild(btn);
   });
   if(state.activeBoardId!==lastTabBoard){
@@ -601,7 +593,8 @@ function openCardView(id, keepOpen){
   if(b) bits.push(`<span class="chip board-chip">📋 ${b.name}</span>`);
   (c.tags||[]).forEach(t=>bits.push(`<span class="chip">#${t}</span>`));
   if(c.priority) bits.push(`<span class="chip pri-${c.priority}">${c.priority==='high'?'🔴 high':c.priority==='med'?'🟡 med':'🟢 low'}</span>`);
-  if(c.due||c.time) bits.push(`<span class="chip">📅 ${[c.due?fmtDate(c.due):'',c.time||''].filter(Boolean).join(' · ')}</span>`);
+  const vDone=b&&b.columns.length&&b.columns[b.columns.length-1].id===c.colId;
+  if(c.due||c.time) bits.push(vDone?`<span class="chip due-done">✓ ${[c.due?fmtDate(c.due):'',c.time||''].filter(Boolean).join(' · ')}</span>`:`<span class="chip">📅 ${[c.due?fmtDate(c.due):'',c.time||''].filter(Boolean).join(' · ')}</span>`);
   const td=countTodos(c.details);
   if(td.total>0) bits.push(`<span class="chip">○ ${td.done}/${td.total} todos</span>`);
   $('viewMeta').innerHTML=bits.join('');
@@ -632,9 +625,10 @@ function toggleTodo(cardId, ln){
   justTicked={id:cardId, ln, ts:Date.now()};
   save(); render();
 }
-function dueChip(c){
+function dueChip(c, done){
   if(!c.due && !c.time) return '';
   const when=[c.due?fmtDate(c.due):'',c.time||''].filter(Boolean).join(' · ');
+  if(done) return `<span class="chip due-done">✓ ${when}</span>`;
   let cls='chip', label=(c.due?'📅 ':'⏰ ')+when;
   if(c.due&&isOverdue(c.due)){cls+=' due-over';label='⚠️ '+when;}
   else if(c.due&&isToday(c.due)){cls+=' due-today';label='⏰ '+when;}
@@ -656,7 +650,7 @@ function cardNode(c, board, colIdx){
   const isDone = board.columns.length>0 && board.columns[board.columns.length-1].id===c.colId;
   const inAll = state.activeBoardId==='__all';
   d.innerHTML=`<div class="card-title"></div>${c.details?'<div class="card-details"></div>':''}
-    <div class="chips">${inAll?`<span class="chip board-chip"></span>`:''}${c.tags.map(t=>`<span class="chip tag-chip" data-tag="${t}" title="Filter by #${t}">#${t}</span>`).join('')}${pri}${dueChip(c)}</div>
+    <div class="chips">${inAll?`<span class="chip board-chip"></span>`:''}${c.tags.map(t=>`<span class="chip tag-chip" data-tag="${t}" title="Filter by #${t}">#${t}</span>`).join('')}${pri}${dueChip(c, isDone)}</div>
     <div class="card-foot"><button class="mini" data-a="edit">Edit</button><button class="mini" data-a="left" title="Move card left">←</button><button class="mini" data-a="right" title="Move card right">→</button><button class="mini${isDone?' done-on':''}" data-a="done" title="${isDone?'Done ✓':'Send card to Done'}">✓</button><button class="mini del" data-a="delcard" title="Delete this card">🗑️</button><button class="mini" data-a="more" title="Open details">•••</button></div>`;
   if(inAll) d.querySelector('.board-chip').textContent='📋 '+board.name;
   if(c.id===freshCardId) d.classList.add('fresh');
@@ -668,8 +662,8 @@ function cardNode(c, board, colIdx){
   if(c.details){ const box=d.querySelector('.card-details'); box.innerHTML=formatDetails(c.details, c.id); wireDetails(box, c); }
   if(selectMode&&selected.has(c.id)) d.classList.add('selected');
   // escape tag chips already safe (tags sanitized lowercase alnum)
-  d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');};
-  d.ondragend=()=>d.classList.remove('dragging');
+  d.ondragstart=(e)=>{e.dataTransfer.setData('text/card-id',c.id);d.classList.add('dragging');window._qbDragging=true;};
+  d.ondragend=()=>{d.classList.remove('dragging');window._qbDragging=false;};
   d.querySelector('[data-a="edit"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
   d.querySelector('[data-a="more"]').onclick=(e)=>{e.stopPropagation();openCardModal(c.id);};
   // press gestures: tap = open/toggle, 550ms hold = select, hold+move = drag.
@@ -695,7 +689,7 @@ function cardNode(c, board, colIdx){
       if(!tdrag){
         if(moved<12) return;
         cancelPress();
-        tdrag={id:c.id,ghost:d.cloneNode(true)};
+        tdrag={id:c.id,sx,sy,t0:performance.now(),ghost:d.cloneNode(true)};
         const r=d.getBoundingClientRect();
         Object.assign(tdrag.ghost.style,{position:'fixed',left:r.left+'px',top:r.top+'px',width:r.width+'px',opacity:'.92',pointerEvents:'none',zIndex:200});
         d.style.touchAction='none';
@@ -704,6 +698,9 @@ function cardNode(c, board, colIdx){
       }
       tdrag.ghost.style.left=(ev.clientX-tdrag.ghost.offsetWidth/2)+'px';
       tdrag.ghost.style.top=(ev.clientY-44)+'px';
+      // edge-scroll lanes under a touch drag
+      if(ev.clientX<70) boardEl.scrollLeft-=16;
+      else if(ev.clientX>window.innerWidth-70) boardEl.scrollLeft+=16;
       document.querySelectorAll('.col.drag-over,.board-tab.drag-over').forEach(x=>x.classList.remove('drag-over'));
       const el=document.elementFromPoint(ev.clientX,ev.clientY);
       const tab=el&&el.closest?el.closest('.board-tab'):null;
@@ -722,6 +719,14 @@ function cardNode(c, board, colIdx){
       const tab=el&&el.closest?el.closest('.board-tab'):null;
       if(tab&&tab.dataset.boardId&&tab.dataset.boardId!=='__all'){ dropCardOnBoard(g.id,tab.dataset.boardId); return; }
       const col=el&&el.closest?el.closest('.col'):null;
+      // touch flick with no drop target: right = done, left = one column back
+      if(ev.type==='pointerup' && !tab && !col){
+        const dx=ev.clientX-g.sx, dy=ev.clientY-g.sy, dt=performance.now()-g.t0;
+        if(dt<350 && Math.abs(dx)>64 && Math.abs(dx)>2*Math.abs(dy)){
+          if(dx>0){ sendCardToDone(g.id); return; }
+          moveCardPrev(g.id); return;
+        }
+      }
       if(col) dropCardOnCol(g.id,col);
     };
     d.addEventListener('pointermove',move);
@@ -740,6 +745,27 @@ function cardNode(c, board, colIdx){
   d.querySelector('[data-a="delcard"]').onclick=(e)=>{e.stopPropagation();if(!confirm(`Delete card "${c.title}"?`))return;tombstoneCards([c.id]);state.cards=state.cards.filter(x=>x.id!==c.id);save();render();};
   return d;
 }
+function sendCardToDone(id){
+  const c=state.cards.find(x=>x.id===id); if(!c) return;
+  const b=state.boards.find(x=>x.id===c.boardId); if(!b||!b.columns.length) return;
+  c.colId=b.columns[b.columns.length-1].id; save(); render();
+  toast('Done ✓');
+}
+function moveCardPrev(id){
+  const c=state.cards.find(x=>x.id===id); if(!c) return;
+  const b=state.boards.find(x=>x.id===c.boardId); if(!b) return;
+  const i=b.columns.findIndex(x=>x.id===c.colId);
+  if(i<=0){ toast('Already in first column'); return; }
+  c.colId=b.columns[i-1].id; save(); render();
+  toast(`Moved to ${b.columns[i-1].name} ✓`);
+}
+// edge-scroll lanes while dragging (touch ghost + native mouse DnD)
+document.addEventListener('dragover',(e)=>{
+  if(!window._qbDragging) return;
+  if(e.clientX<70) boardEl.scrollLeft-=16;
+  else if(e.clientX>window.innerWidth-70) boardEl.scrollLeft+=16;
+});
+document.addEventListener('drop',()=>{ window._qbDragging=false; },true);
 function moveCard(c, dir){
   const b=state.boards.find(x=>x.id===c.boardId); if(!b)return;
   const i=b.columns.findIndex(x=>x.id===c.colId);
@@ -1318,6 +1344,16 @@ function parseFull(raw, defs){
   }
   return {title, details, tags, priority, due, time, boardId, isMeeting:intel.isMeeting};
 }
+// item 9: drop a leading details line that merely repeats the title (imported invites)
+function dedupTitleDetails(title, details){
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  if(!title||!details) return details;
+  const t=norm(title); if(!t) return details;
+  const lines=String(details).split('\n');
+  if(lines.length&&norm(lines[0])===t) lines.shift();
+  else if(lines.length>1&&norm(lines[0]+' '+lines[1])===t){ lines.splice(0,2); }
+  return lines.join('\n');
+}
 function doQuickAdd(){
   const e=qaEls();
   const raw=e.t.value.trim(); if(!raw)return;
@@ -1338,7 +1374,7 @@ function doQuickAdd(){
   const b=(boardId&&state.boards.find(x=>x.id===boardId))||state.boards.find(x=>x.id===e.b.value)||fallbackBoard();
   if(!b) return;
   const col=b.columns.find(x=>x.id===e.c.value)||b.columns[0];
-  state.cards.unshift({id:uid(),boardId:b.id,colId:col.id,title:p.title.slice(0,200),details:notes.slice(0,2000),tags,priority,due,time:time||'',createdAt:Date.now()});
+  state.cards.unshift({id:uid(),boardId:b.id,colId:col.id,title:p.title.slice(0,200),details:dedupTitleDetails(p.title,notes).slice(0,2000),tags,priority,due,time:time||'',createdAt:Date.now()});
   markFresh(state.cards[0].id);
   rememberSmart(b.id, tags, priority);
   resetComposer();
@@ -1481,7 +1517,7 @@ function renderCal(){
     row.innerHTML=`${done?'<span class="cal-tick">✓</span>':''}<span class="cal-item-tm"></span><span class="cal-item-t"></span><span class="cal-item-b"></span>`;
     row.children[0].textContent=c.time||'––:––';
     row.children[1].textContent=c.title;
-    row.children[2].textContent=(b?b.name:'?')+(isOverdue(c.due)?' • overdue':'');
+    row.children[2].textContent=(b?b.name:'?')+((isOverdue(c.due)&&!done)?' • overdue':'');
     row.onclick=()=>{ calReturn=true; $('calModal').classList.add('hidden'); state.activeBoardId=c.boardId; save(true); render(); openCardModal(c.id); };
     list.appendChild(row);
   });
@@ -1547,11 +1583,11 @@ function gcalSync(manual){
         const title=(ev.summary||'Untitled event').slice(0,200);
         const loc=ev.location?`\nWhere: ${ev.location}`:'';
         const meet=ev.hangoutLink?`\nJoin: ${ev.hangoutLink}`:'';
-        const desc=(ev.description||'').replace(/<[^>]+>/g,'').trim().slice(0,500);
-        const details=`${title}\n${due}${time?' · '+time:''}${loc}${meet}${desc?'\n\n'+desc:''}`.slice(0,2000);
+        const desc=dedupTitleDetails(title,(ev.description||'').replace(/<[^>]+>/g,'').trim()).slice(0,500);
+        const details=`${due}${time?' · '+time:''}${loc}${meet}${desc?'\n\n'+desc:''}`.slice(0,2000);
         const ex=map[ev.id]&&state.cards.find(c=>c.id===map[ev.id]);
         if(ex){
-          if(ex.title!==title||ex.due!==due||(ex.time||'')!==time){ ex.title=title; ex.due=due; ex.time=time; ex.details=details; updated++; }
+          if(ex.title!==title||ex.due!==due||(ex.time||'')!==time||ex.details!==details){ ex.title=title; ex.due=due; ex.time=time; ex.details=details; updated++; }
         }else{
           if(state.cards.some(c=>c.boardId===board.id&&c.title===title&&c.due===due)) return; // same event re-made elsewhere — no dupe
           state.cards.unshift({id:uid(),boardId:board.id,colId:inbox.id,title,details,tags:['gcal'],priority:'',due,time,createdAt:Date.now()});
@@ -1750,7 +1786,7 @@ function updateSyncStatus(){
 }
 
 /* Optional Firebase sync (graceful, no hard dependency) */
-const APP_VER = 'v90';
+const APP_VER = 'v91';
 let cloudOn=false, cloudBusy=false, lastSyncAt=0;
 function getEffectiveCfg(){
   // 1. baked-in file (Option B: same on Mac + phone after deploy)

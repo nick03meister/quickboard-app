@@ -209,6 +209,7 @@ code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:0
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{font-size:11px;background:#f1f5f9;border:1px solid var(--line);border-radius:999px;padding:2px 8px}
 .chip.due-over{background:#fef2f2;border-color:#fecaca;color:#b91c1c;font-weight:700}
+.chip.due-done{background:#f1f5f9;border-color:var(--line);color:#8a8a8a;font-weight:600}
 .chip.due-today{background:#fffbeb;border-color:#fde68a;color:#92400e;font-weight:700}
 .chip.pri-high{background:#0f172a;color:#fff}
 .chip.pri-med{background:#e0f2fe;border-color:#bae6fd}
